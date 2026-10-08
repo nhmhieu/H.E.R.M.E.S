@@ -17,6 +17,7 @@ def calculate_gpa(grades: list[tuple[float, int]]) -> float:
 
     return round(total_points / total_credits, 2)
 
+
 def check_academic_warning(gpa: float, accumulated_credits: int) -> dict:
     """
     Check academic warning status based on GPA and accumulated credits.
@@ -39,5 +40,5 @@ def check_academic_warning(gpa: float, accumulated_credits: int) -> dict:
         "is_warning": is_warning,
         "status": status,
         "gpa": gpa,
-        "credits": accumulated_credits
+        "credits": accumulated_credits,
     }

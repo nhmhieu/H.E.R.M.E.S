@@ -8,10 +8,12 @@ from hermes.security.guardrails import sanitize_input
 
 console = Console()
 
+
 @click.group()
 def cli():
     """H.E.R.M.E.S CLI - HCMUS Educational Resource & Mentoring Expert System."""
     pass
+
 
 @cli.command()
 def info():
@@ -19,9 +21,22 @@ def info():
     console.print("[bold blue]H.E.R.M.E.S[/bold blue] v0.1.0")
     console.print("System Status: [green]Online[/green]")
 
+
 @cli.command()
-@click.option('--grades', '-g', multiple=True, type=(float, int), help="Grade and credits, e.g. -g 8.5 4 -g 7.0 3")
-@click.option('--total-credits', '-t', type=int, default=0, help="Total accumulated credits for warning check")
+@click.option(
+    "--grades",
+    "-g",
+    multiple=True,
+    type=(float, int),
+    help="Grade and credits, e.g. -g 8.5 4 -g 7.0 3",
+)
+@click.option(
+    "--total-credits",
+    "-t",
+    type=int,
+    default=0,
+    help="Total accumulated credits for warning check",
+)
 def gpa(grades, total_credits):
     """Calculate GPA and check academic standing."""
     if not grades:
@@ -34,19 +49,35 @@ def gpa(grades, total_credits):
     if total_credits > 0:
         warning_info = check_academic_warning(gpa_val, total_credits)
         status_color = "red" if warning_info["is_warning"] else "green"
-        console.print(f"Academic Status: [bold {status_color}]{warning_info['status']}[/bold {status_color}]")
+        console.print(
+            f"Academic Status: [bold {status_color}]{warning_info['status']}[/bold {status_color}]"
+        )
+
 
 @cli.command()
-@click.option('--subject', '-s', multiple=True, type=(str, int, int), help="Subject name, credits, priority (higher is more important)")
-@click.option('--hours', '-h', type=float, required=True, help="Available daily study hours")
-@click.option('--days', '-d', type=int, required=True, help="Days left until exams")
+@click.option(
+    "--subject",
+    "-s",
+    multiple=True,
+    type=(str, int, int),
+    help="Subject name, credits, priority (higher is more important)",
+)
+@click.option(
+    "--hours", "-h", type=float, required=True, help="Available daily study hours"
+)
+@click.option("--days", "-d", type=int, required=True, help="Days left until exams")
 def plan(subject, hours, days):
     """Generate a study schedule."""
     if not subject:
-        console.print("[yellow]No subjects provided. Use -s <name> <credits> <priority>[/yellow]")
+        console.print(
+            "[yellow]No subjects provided. Use -s <name> <credits> <priority>[/yellow]"
+        )
         return
 
-    subjects_list = [{'name': name, 'credits': credits, 'priority': priority} for name, credits, priority in subject]
+    subjects_list = [
+        {"name": name, "credits": credits, "priority": priority}
+        for name, credits, priority in subject
+    ]
 
     schedule = generate_study_plan(subjects_list, hours, days)
 
@@ -60,12 +91,15 @@ def plan(subject, hours, days):
     table.add_column("Daily Hours", justify="right", style="green")
 
     for item in schedule:
-        table.add_row(item['subject'], str(item['allocated_hours']), str(item['daily_hours']))
+        table.add_row(
+            item["subject"], str(item["allocated_hours"]), str(item["daily_hours"])
+        )
 
     console.print(table)
 
+
 @cli.command()
-@click.argument('query')
+@click.argument("query")
 def ask(query):
     """Ask H.E.R.M.E.S a question (routes via guardrails)."""
     is_safe, msg = sanitize_input(query)
@@ -74,7 +108,10 @@ def ask(query):
         return
 
     console.print(f"[green]Processing safe query:[/green] {query}")
-    console.print("[italic yellow](Routing to LLM/RAG engines not fully implemented yet.)[/italic yellow]")
+    console.print(
+        "[italic yellow](Routing to LLM/RAG engines not fully implemented yet.)[/italic yellow]"
+    )
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     cli()

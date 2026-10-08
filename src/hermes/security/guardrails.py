@@ -1,5 +1,6 @@
 import re
 
+
 def sanitize_input(text: str) -> tuple[bool, str]:
     """
     Check for prompt injection patterns, forbidden keywords, and excessive length.
@@ -17,7 +18,7 @@ def sanitize_input(text: str) -> tuple[bool, str]:
         r"system prompt",
         r"bypass",
         r"you are now",
-        r"jailbreak"
+        r"jailbreak",
     ]
 
     text_lower = text.lower()
@@ -30,11 +31,14 @@ def sanitize_input(text: str) -> tuple[bool, str]:
     forbidden_keywords = [
         "do my homework",
         "write code for me",
-        "solve this assignment"
+        "solve this assignment",
     ]
 
     for keyword in forbidden_keywords:
         if keyword in text_lower:
-            return False, "Request violates system boundaries (e.g., asking to do homework)."
+            return (
+                False,
+                "Request violates system boundaries (e.g., asking to do homework).",
+            )
 
     return True, "Input is safe."

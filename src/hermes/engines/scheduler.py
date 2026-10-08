@@ -1,4 +1,6 @@
-def generate_study_plan(subjects: list[dict], available_daily_hours: float, days_left: int) -> list[dict]:
+def generate_study_plan(
+    subjects: list[dict], available_daily_hours: float, days_left: int
+) -> list[dict]:
     """
     Generate a deterministic, conflict-free study plan.
     Subjects format: [{'name': 'Math', 'credits': 4, 'priority': 1}, ...]
@@ -9,13 +11,17 @@ def generate_study_plan(subjects: list[dict], available_daily_hours: float, days
     total_available_hours = available_daily_hours * days_left
 
     # Sort subjects by priority (highest first) then credits (highest first)
-    sorted_subjects = sorted(subjects, key=lambda x: (x.get('priority', 0), x.get('credits', 0)), reverse=True)
+    sorted_subjects = sorted(
+        subjects,
+        key=lambda x: (x.get("priority", 0), x.get("credits", 0)),
+        reverse=True,
+    )
 
     plan = []
     remaining_hours = total_available_hours
 
     # Simple deterministic allocation based on credits
-    total_credits = sum(s.get('credits', 1) for s in sorted_subjects)
+    total_credits = sum(s.get("credits", 1) for s in sorted_subjects)
 
     if total_credits == 0:
         return []
@@ -25,7 +31,7 @@ def generate_study_plan(subjects: list[dict], available_daily_hours: float, days
             break
 
         # Allocate hours proportionally to credits, but at least 1 hour if possible
-        allocation_ratio = subject.get('credits', 1) / total_credits
+        allocation_ratio = subject.get("credits", 1) / total_credits
         allocated_hours = round(total_available_hours * allocation_ratio, 1)
 
         # Ensure we don't exceed remaining hours
@@ -37,10 +43,12 @@ def generate_study_plan(subjects: list[dict], available_daily_hours: float, days
 
         remaining_hours -= allocated_hours
 
-        plan.append({
-            'subject': subject.get('name', 'Unknown'),
-            'allocated_hours': allocated_hours,
-            'daily_hours': round(allocated_hours / days_left, 2)
-        })
+        plan.append(
+            {
+                "subject": subject.get("name", "Unknown"),
+                "allocated_hours": allocated_hours,
+                "daily_hours": round(allocated_hours / days_left, 2),
+            }
+        )
 
     return plan
