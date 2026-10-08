@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=61.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hermes"
+version = "0.1.0"
+description = "HCMUS Educational Resource & Mentoring Expert System"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [
+    {name = "H.E.R.M.E.S Team"}
+]
+dependencies = [
+    "click>=8.0.0",
+    "rich>=13.0.0"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-cov",
+    "black",
+    "flake8"
+]
+
+[project.scripts]
+hermes = "hermes.cli:cli"
+
+[tool.setuptools.packages.find]
+where = ["src"]
