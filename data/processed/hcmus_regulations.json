@@ -1,0 +1,54 @@
+[
+  {
+    "document": "Quy chế đào tạo đại học",
+    "article": 10,
+    "clause": 1,
+    "page": 5,
+    "content": "Sinh viên được đăng ký tối đa 25 tín chỉ trong một học kỳ chính.",
+    "keywords": [
+      "tín chỉ",
+      "đăng ký",
+      "tối đa",
+      "học kỳ"
+    ]
+  },
+  {
+    "document": "Quy chế đào tạo đại học",
+    "article": 14,
+    "clause": 2,
+    "page": 8,
+    "content": "Sinh viên vắng thi cuối kỳ không có lý do chính đáng sẽ nhận điểm 0.",
+    "keywords": [
+      "vắng thi",
+      "điểm 0",
+      "cuối kỳ",
+      "lý do"
+    ]
+  },
+  {
+    "document": "Quy chế đào tạo đại học",
+    "article": 18,
+    "clause": 1,
+    "page": 12,
+    "content": "Sinh viên bị cảnh báo học vụ nếu điểm trung bình học kỳ dưới 1.0 (thang 4).",
+    "keywords": [
+      "cảnh báo",
+      "học vụ",
+      "điểm trung bình",
+      "GPA"
+    ]
+  },
+  {
+    "document": "Quy chế đào tạo đại học",
+    "article": 25,
+    "clause": 3,
+    "page": 18,
+    "content": "Điều kiện tốt nghiệp: Tích lũy đủ số tín chỉ, điểm trung bình chung >= 2.0.",
+    "keywords": [
+      "tốt nghiệp",
+      "tích lũy",
+      "điểm trung bình",
+      "GPA"
+    ]
+  }
+]
