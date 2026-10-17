@@ -230,9 +230,7 @@ class HermesAIClient:
         _load_env_file()
 
         resolved_mode = (
-            mode
-            if mode is not None
-            else os.getenv("HERMES_AI_MODE", DEFAULT_AI_MODE)
+            mode if mode is not None else os.getenv("HERMES_AI_MODE", DEFAULT_AI_MODE)
         )
         self.mode = resolved_mode.strip().lower()
         if self.mode not in {"mock", "gemini"}:
@@ -242,9 +240,7 @@ class HermesAIClient:
             )
 
         self.api_key = (
-            api_key
-            if api_key is not None
-            else os.getenv("GEMINI_API_KEY", "")
+            api_key if api_key is not None else os.getenv("GEMINI_API_KEY", "")
         ).strip()
         self.model = (
             model
@@ -488,9 +484,7 @@ class HermesAIClient:
             "generationConfig": {"temperature": 0.2},
         }
         if system_instruction:
-            payload["systemInstruction"] = {
-                "parts": [{"text": system_instruction}]
-            }
+            payload["systemInstruction"] = {"parts": [{"text": system_instruction}]}
 
         data = json.dumps(payload).encode("utf-8")
         request = urllib.request.Request(
