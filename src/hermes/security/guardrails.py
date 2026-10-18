@@ -311,9 +311,8 @@ def validate_and_clean(
 
     for pattern in INJECTION_PATTERNS:
         compact_pattern = pattern.replace(r"\s+", r"\s*")
-        if (
-            re.search(pattern, scan_text, re.IGNORECASE)
-            or re.search(compact_pattern, compact_text, re.IGNORECASE)
+        if re.search(pattern, scan_text, re.IGNORECASE) or re.search(
+            compact_pattern, compact_text, re.IGNORECASE
         ):
             return GuardrailResult(
                 allowed=False,
