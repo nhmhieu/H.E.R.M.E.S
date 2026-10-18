@@ -1,15 +1,16 @@
 from __future__ import annotations
 
-import argparse # đọc tham số dòng lệnh
+import argparse  # đọc tham số dòng lệnh
 import json
 import math
-import re # regex tìm alies và tách từ
-import unicodedata # xử lý dấu tiếng việt
+import re        # regex tìm alies và tách từ
+import unicodedata    # xử lý dấu tiếng việt
 from collections import Counter
 from pathlib import Path
 
 _ME = Path(__file__).resolve()
-_ROOT = _ME.parents[3] if len(_ME.parents) > 3 else _ME.parent #file nằm quá nông không đủ 3 cấp thì lấy thư mục chứa file
+_ROOT = _ME.parents[3] if len(_ME.parents) > 3 else _ME.parent
+# file nằm quá nông không đủ 3 cấp thì lấy thư mục chứa file
 DEFAULT_DATA = _ROOT / "data" / "processed" / "hcmus_regulations.json"
 
 ALIAS_NGANH = {
@@ -34,7 +35,6 @@ ALIAS_NGANH = {
     "may tinh": "Khoa học máy tính",
 }
 
-
 ALIAS_CHUONG_TRINH = {
     "tang cuong tieng anh": "tăng cường tiếng Anh",
     "tang cuong": "tăng cường tiếng Anh",
@@ -50,12 +50,12 @@ STOPWORDS = {
     "duoc", "o", "trong", "khi", "nay", "do", "hoc", "nganh", "a", "b", "c", "sao",
 }
 
-
 # Sinh viên hỏi bằng ngôn ngữ đời thường, văn bản dùng thuật ngữ chính thức.
 # Khóa = cụm từ (đã bỏ dấu) trong câu hỏi; giá trị = các từ được THÊM vào truy vấn (không thay thế).
 MO_RONG = {
     "rot mon": "khong dat hoc lai", "rot": "khong dat hoc lai", "truot": "khong dat hoc lai",
-    "bi f": "khong dat hoc lai thang diem diem chu", "diem f": "khong dat hoc lai thang diem diem chu", "thi lai": "hoc lai hoan thi",
+    "bi f": "khong dat hoc lai thang diem diem chu",
+    "diem f": "khong dat hoc lai thang diem diem chu", "thi lai": "hoc lai hoan thi",
     "dtb": "diem trung binh", "diem tb": "diem trung binh", "gpa": "diem trung binh tich luy",
     "cpa": "diem trung binh tich luy", "hoc luc": "xep loai diem trung binh",
     "xep loai": "diem trung binh xuat sac gioi kha", "xep hang": "diem trung binh tich luy xuat sac gioi",
@@ -82,13 +82,14 @@ def mo_rong(q: str) -> list[str]:
 
 
 def bo_dau(s: str) -> str:
-    s = unicodedata.normalize("NFD", s.lower()) # tách ký tự có dấu thanh chữ gốc và dấu
-    s = "".join(ch for ch in s if unicodedata.category(ch) != "Mn") # duyệt các kí tự trù dấu
+    s = unicodedata.normalize("NFD", s.lower())  # tách ký tự có dấu thanh chữ gốc và dấu
+    s = "".join(ch for ch in s if unicodedata.category(ch) != "Mn")  # duyệt các kí tự trừ dấu
     return s.replace("đ", "d")
 
 
 def tach_tu(s: str) -> list[str]:
     return re.findall(r"[a-z0-9]+", bo_dau(s))
+
 
 def nhan_dien(q: str, bang_alias: dict[str, str]) -> tuple[set[str], str]:
     tim_thay: set[str] = set()
@@ -98,6 +99,7 @@ def nhan_dien(q: str, bang_alias: dict[str, str]) -> tuple[set[str], str]:
             tim_thay.add(bang_alias[alias])
             q = re.sub(pattern, " ", q)
     return tim_thay, q
+
 
 def trich_dan(chunk: dict, vb: dict) -> str:
     s = f"{vb['loai']} {vb['so_hieu']}".strip() if vb["so_hieu"] else vb["ten_van_ban"]
@@ -111,6 +113,7 @@ def trich_dan(chunk: dict, vb: dict) -> str:
 
 
 class KeywordRetriever:
+
     def __init__(self, data_path: str | Path = DEFAULT_DATA):
         data = json.loads(Path(data_path).read_text(encoding="utf-8"))
         # khóa bắt đầu bằng '_' (ví dụ _huong_dan_them_du_lieu) bị bỏ qua
@@ -129,7 +132,7 @@ class KeywordRetriever:
                 "chunk": c,
                 "vb": vb,
                 "tf": Counter(tach_tu(c["text"])),  # tần suất từ trong nội dung
-                "head": set(tach_tu(head)),         # từ trong tiêu đề/chủ đề, được cộng thêm điểm
+                "head": set(tach_tu(head)),        # từ trong tiêu đề/chủ đề, được cộng thêm điểm
                 # chuỗi từ liền nhau (đã bỏ dấu) để kiểm tra cụm "buoc thoi hoc", "hoc lai"...
                 "norm": " " + " ".join(tach_tu(f"{c['ten_dieu']} {c['chu_de']} {c['text']}")) + " ",
             })
@@ -141,8 +144,14 @@ class KeywordRetriever:
             df.update(set(d["tf"]) | d["head"])
         self.idf = {t: math.log(1 + (n - k + 0.5) / (k + 0.5)) for t, k in df.items()}
 
-    def search(self, query: str, top_k: int = 3, min_score: float = 0.5, min_ratio: float = 0.25,
-               min_coverage: float = 0.35) -> dict:
+    def search(
+        self,
+        query: str,
+        top_k: int = 3,
+        min_score: float = 0.5,
+        min_ratio: float = 0.25,
+        min_coverage: float = 0.35,
+    ) -> dict:
         q = bo_dau(query)
         # "khóa 2023": lấy ra để cảnh báo, không đưa vào từ khóa tìm kiếm
         m_khoa = re.search(r"\bkhoa\s+(20\d\d)\b", q)
@@ -173,7 +182,7 @@ class KeywordRetriever:
             if df_c:
                 cum_hiem.append((cum, math.log(1 + (len(self.docs) - df_c + 0.5) / (df_c + 0.5))))
 
-        #loc theo metadata
+        # loc theo metadata
         ung_vien = [
             d for d in self.docs
             if (not nganh or not d["vb"]["nganh"] or any(n in d["vb"]["nganh"] for n in nganh))
@@ -188,7 +197,7 @@ class KeywordRetriever:
             for t in tokens:
                 if t not in self.idf:
                     continue
-                trong_so = w_tok[t] * self.idf[t] ** 2  # bình phương: từ hiếm (ielts, toeic...) áp đảo từ chung
+                trong_so = w_tok[t] * self.idf[t] ** 2    # bình phương: từ hiếm (ielts, toeic...) áp đảo từ chung
                 tf = d["tf"].get(t, 0)
                 if tf or t in d["head"]:
                     khop += trong_so
@@ -202,6 +211,7 @@ class KeywordRetriever:
             # độ phủ: phần trọng số của câu hỏi mà chunk này khớp được (câu ngoài phạm vi thường < 0.35)
             if diem > 0 and (tong_w == 0 or khop / tong_w >= min_coverage):
                 ket_qua.append((diem, d))
+
         def loc(ds):  # sắp xếp + bỏ điểm quá thấp (tuyệt đối min_score, hoặc so với kết quả đầu min_ratio)
             ds = sorted(ds, key=lambda x: x[0], reverse=True)
             if not ds:
@@ -209,11 +219,11 @@ class KeywordRetriever:
             nguong = max(min_score, min_ratio * ds[0][0])
             return [x for x in ds if x[0] >= nguong]
 
-        if nganh or chuong_trinh:  # người dùng nêu ngành/chương trình: ưu tiên nhẹ văn bản riêng của ngành
+        if nganh or chuong_trinh:       # người dùng nêu ngành/chương trình: ưu tiên nhẹ văn bản riêng của ngành
             ket_qua = [(diem * 1.5 if d["vb"]["nganh"] else diem, d) for diem, d in ket_qua]
         ket_qua = loc(ket_qua)[:top_k]
 
-        #khong nêu ngành và kết quả dấn đến nhiều chuẩn khác nhau thì nên hỏi lại
+        # khong nêu ngành và kết quả dấn đến nhiều chuẩn khác nhau thì nên hỏi lại
         nhom = {d["vb"].get("nhom_chuan") for _, d in ket_qua
                 if d["chunk"].get("chung_chi_toi_thieu")} - {None}  # chỉ hỏi lại khi các mức điểm khác nhau
         can_hoi_lai = not nganh and len(nhom) > 1
@@ -245,6 +255,7 @@ class KeywordRetriever:
             ],
         }
 
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", default=str(DEFAULT_DATA))
@@ -258,17 +269,17 @@ def main() -> None:
     def hoi(q: str) -> None:
         out = r.search(q, top_k=args.top)
         print(f"\n? {q}")
-        print(f"  ngành={out['nganh']} chương trình={out['chuong_trinh']}")
+        print(f"   ngành={out['nganh']} chương trình={out['chuong_trinh']}")
         if out["canh_bao"]:
-            print("  CẢNH BÁO: " + out["canh_bao"])
+            print("   CẢNH BÁO: " + out["canh_bao"])
         if out["can_hoi_lai"]:
-            print("  Lưu ý: chưa biết bạn học ngành nào. Mức điểm khác nhau theo ngành, "
+            print("   Lưu ý: chưa biết bạn học ngành nào. Mức điểm khác nhau theo ngành, "
                   "hãy nêu ngành để có đáp án chính xác.")
         if not out["ket_qua"]:
-            print("  (không tìm thấy chunk phù hợp)")
+            print("   (không tìm thấy chunk phù hợp)")
         tu_khoa = set(tach_tu(q)) - STOPWORDS
         for k in out["ket_qua"]:
-            print(f"\n  {k['trich_dan']}  (độ phù hợp {k['diem']})")
+            print(f"\n   {k['trich_dan']}   (độ phù hợp {k['diem']})")
             cc = k.get("chung_chi_toi_thieu")
             if cc:
                 chon = {ten: gt for ten, gt in cc.items() if tu_khoa & set(tach_tu(ten))}
