@@ -1,6 +1,6 @@
 def convert_score_to_4_and_letter(grade_10: float) -> tuple[float, str]:
     """
-    Quy đổi điểm hệ 10 sang điểm hệ 4 và điểm chữ 
+    Quy đổi điểm hệ 10 sang điểm hệ 4 và điểm chữ
     theo chuẩn Quy chế đào tạo HCMUS (Điều 11).
     """
     if grade_10 >= 9.0:
@@ -65,7 +65,6 @@ def calculate_gpa_4(grades: list[tuple[float, int]]) -> float:
     return round(total_points / total_credits, 2)
 
 
-
 def check_academic_warning(
     current_semester_earned_credits: int,
     accumulated_credits: int,
@@ -104,9 +103,7 @@ def check_academic_warning(
     if consecutive_warnings < 0:
         raise ValueError("Số lần cảnh cáo liên tiếp không được âm.")
 
-    if previous_semester_gpa is not None and not (
-        0 <= previous_semester_gpa <= 10
-    ):
+    if previous_semester_gpa is not None and not (0 <= previous_semester_gpa <= 10):
         raise ValueError("GPA học kỳ trước phải nằm trong [0, 10].")
 
     if two_previous_semesters_gpa is not None and not (
@@ -119,33 +116,20 @@ def check_academic_warning(
 
     # Điều 16.1.a: tín chỉ đạt trong học kỳ < 7,
     # trừ trường hợp đã tích lũy ít nhất 130 tín chỉ.
-    if (
-        current_semester_earned_credits < 7
-        and accumulated_credits < 130
-    ):
-        reasons.append(
-            "Số tín chỉ đạt trong học kỳ nhỏ hơn 7"
-        )
+    if current_semester_earned_credits < 7 and accumulated_credits < 130:
+        reasons.append("Số tín chỉ đạt trong học kỳ nhỏ hơn 7")
 
     # Điều 16.1.b: GPA học kỳ liền kề trước đó < 3.0.
     if previous_semester_gpa is None:
-        missing_checks.append(
-            "Chưa có GPA của học kỳ liền kề trước đó"
-        )
+        missing_checks.append("Chưa có GPA của học kỳ liền kề trước đó")
     elif previous_semester_gpa < 3.0:
-        reasons.append(
-            "GPA học kỳ liền kề trước đó nhỏ hơn 3.0"
-        )
+        reasons.append("GPA học kỳ liền kề trước đó nhỏ hơn 3.0")
 
     # Điều 16.1.b: GPA của hai học kỳ liền kề trước đó < 4.0.
     if two_previous_semesters_gpa is None:
-        missing_checks.append(
-            "Chưa có kết quả GPA để xét hai học kỳ liền kề"
-        )
+        missing_checks.append("Chưa có kết quả GPA để xét hai học kỳ liền kề")
     elif two_previous_semesters_gpa < 4.0:
-        reasons.append(
-            "GPA xét cho hai học kỳ liền kề nhỏ hơn 4.0"
-        )
+        reasons.append("GPA xét cho hai học kỳ liền kề nhỏ hơn 4.0")
 
     # Chỉ kết luận không bị cảnh cáo khi đã kiểm tra đủ điều kiện.
     if reasons:
@@ -164,10 +148,7 @@ def check_academic_warning(
         new_consecutive_warnings = consecutive_warnings
 
     # Điều 16.2.c: cảnh cáo học tập lần thứ ba liên tiếp.
-    third_consecutive_warning = (
-        is_warning is True
-        and new_consecutive_warnings >= 3
-    )
+    third_consecutive_warning = is_warning is True and new_consecutive_warnings >= 3
 
     if third_consecutive_warning:
         status = (

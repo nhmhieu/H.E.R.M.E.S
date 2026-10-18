@@ -29,8 +29,6 @@
 #     assert result["status"] == "Warning Level 3: Academic Probation / Dismissal Risk"
 
 
-
-
 import pytest
 
 from hermes.engines.academic_calc import (
@@ -40,10 +38,10 @@ from hermes.engines.academic_calc import (
     check_academic_warning,
 )
 
-
 # ==========================================
 # 1. Tests for convert_score_to_4_and_letter
 # ==========================================
+
 
 @pytest.mark.parametrize(
     "grade, expected_4, expected_letter",
@@ -66,9 +64,7 @@ from hermes.engines.academic_calc import (
         (0.0, 0.0, "F"),
     ],
 )
-def test_convert_score_to_4_and_letter(
-    grade, expected_4, expected_letter
-):
+def test_convert_score_to_4_and_letter(grade, expected_4, expected_letter):
     assert convert_score_to_4_and_letter(grade) == (
         expected_4,
         expected_letter,
@@ -78,6 +74,7 @@ def test_convert_score_to_4_and_letter(
 # ======================
 # 2. Tests for GPA 10
 # ======================
+
 
 def test_calculate_gpa_10_weighted_average():
     # GPA = (8*3 + 6*2) / (3+2) = 7.2
@@ -100,6 +97,7 @@ def test_calculate_gpa_10_zero_total_credits():
 # 3. Tests for GPA 4
 # ======================
 
+
 def test_calculate_gpa_4_converts_each_course_before_averaging():
     # 8.0 -> 3.5; 6.0 -> 2.5
     # GPA 4 = (3.5*3 + 2.5*1) / 4 = 3.25
@@ -113,6 +111,7 @@ def test_calculate_gpa_4_empty_list():
 # ===========================
 # 4. Tests for academic warning
 # ===========================
+
 
 def test_warning_when_earned_credits_below_7():
     result = check_academic_warning(
@@ -209,6 +208,7 @@ def test_missing_gpa_data_does_not_claim_no_warning():
 # ==========================
 # 5. Tests for invalid inputs
 # ==========================
+
 
 @pytest.mark.parametrize(
     "current_credits, accumulated_credits, consecutive_warnings",
