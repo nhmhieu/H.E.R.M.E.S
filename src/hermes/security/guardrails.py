@@ -305,11 +305,15 @@ def validate_and_clean(
 
     # Layer B: Prompt Injection detection (checks normal and de-obfuscated text)
     scan_text = _normalize_for_detection(stripped)
-    deobfuscated_text = _collapse_spaced_letters(stripped)
+    compact_text = re.sub(
+        r"(?<=\b[a-zA-Z])[\s._-]+(?=[a-zA-Z]\b)", "", stripped.lower()
+    )
 
     for pattern in INJECTION_PATTERNS:
-        if re.search(pattern, scan_text, re.IGNORECASE) or re.search(
-            pattern, deobfuscated_text, re.IGNORECASE
+        compact_pattern = pattern.replace(r"\s+", r"\s*")
+        if (
+            re.search(pattern, scan_text, re.IGNORECASE)
+            or re.search(compact_pattern, compact_text, re.IGNORECASE)
         ):
             return GuardrailResult(
                 allowed=False,
