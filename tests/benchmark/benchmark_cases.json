@@ -1,0 +1,182 @@
+
+[ 
+  {
+    "id": "TC_AI_EXT_01",
+    "assigned_member": "Hồ Ngọc Như Ý",
+    "category": "deadline_extraction",
+    "description": "Bóc tách deadline từ thông báo đơn giản (Môn học, Hạn nộp, Nội dung)",
+    "query": "Thông báo môn Tư duy tính toán: Bài tập cá nhân 1 nộp trước 23h59 ngày 15/11/2026 trên Moodle.",
+    "expected_route": "SlowPath_AI",
+    "ground_truth": {
+      "subject": "Tư duy tính toán",
+      "deadline": "2026-11-15T23:59:00",
+      "content": "Bài tập cá nhân 1 (Nộp trên Moodle)"
+    }
+  },
+  {
+    "id": "TC_AI_EXT_02",
+    "assigned_member": "Hồ Ngọc Như Ý",
+    "category": "deadline_extraction",
+    "description": "Lọc mốc thời gian nhiễu (Phân biệt ngày đăng thông báo và deadline thực tế)",
+    "query": "Thông báo ngày 01/11/2026: Do tuần sau thầy đi công tác nên bài Lab 3 môn Cơ sở lập trình sẽ gia hạn đến 17h00 ngày 25/11/2026 thay vì hạn cũ 10/11.",
+    "expected_route": "SlowPath_AI",
+    "ground_truth": {
+      "subject": "Cơ sở lập trình",
+      "deadline": "2026-11-25T17:00:00",
+      "content": "Bài Lab 3 (Hạn gia hạn mới)"
+    }
+  },
+  {
+    "id": "TC_AI_EXT_03",
+    "assigned_member": "Hồ Ngọc Như Ý",
+    "category": "deadline_extraction",
+    "description": "Bóc tách deadline thông báo bằng tiếng Anh và thuật ngữ viết tắt (LMS, HW, Quiz)",
+    "query": "Announcement for CS201 - Data Structures: HW2 on Binary Trees is due by 11:59 PM, Nov 20, 2026. Submit your code zip to LMS.",
+    "expected_route": "SlowPath_AI",
+    "ground_truth": {
+      "subject": "Data Structures (CS201)",
+      "deadline": "2026-11-20T23:59:00",
+      "content": "HW2 on Binary Trees (Submit code zip to LMS)"
+    }
+  },
+  {
+    "id": "TC_AI_EXT_04",
+    "assigned_member": "Hồ Ngọc Như Ý",
+    "category": "deadline_extraction",
+    "description": "Bóc tách danh sách nhiều bài tập của nhiều môn khác nhau trong cùng 1 email",
+    "query": "Nhắc nhở tuần này: Môn Toán rời rạc nộp Báo cáo BT lớn trước 12h00 ngày 18/11/2026. Môn Mạng máy tính nộp Bài Lab 2 trước 23h59 ngày 19/11/2026.",
+    "expected_route": "SlowPath_AI",
+    "ground_truth": {
+      "tasks": [
+        {
+          "subject": "Toán rời rạc",
+          "deadline": "2026-11-18T12:00:00",
+          "content": "Báo cáo BT lớn"
+        },
+        {
+          "subject": "Mạng máy tính",
+          "deadline": "2026-11-19T23:59:00",
+          "content": "Bài Lab 2"
+        }
+      ]
+    }
+  },
+  {
+    "id": "TC_AI_ICS_01",
+    "assigned_member": "Hồ Ngọc Như Ý",
+    "category": "moodle_ics_parser",
+    "description": "Đọc và bóc tách dữ liệu chuẩn từ file lịch Moodle .ics đơn lẻ",
+    "query": "BEGIN:VCALENDAR\nBEGIN:VEVENT\nSUMMARY:Nộp bài Lab 3 Cơ sở dữ liệu\nDESCRIPTION:Nộp file script .sql\nDTSTART:20261112T160000Z\nEND:VEVENT\nEND:VCALENDAR",
+    "expected_route": "SlowPath_AI",
+    "ground_truth": {
+      "subject": "Cơ sở dữ liệu",
+      "deadline": "2026-11-12T23:00:00+07:00",
+      "content": "Nộp bài Lab 3 (file script .sql)"
+    }
+  },
+  {
+    "id": "TC_AI_ICS_02",
+    "assigned_member": "Hồ Ngọc Như Ý",
+    "category": "moodle_ics_parser",
+    "description": "Đọc file Moodle .ics chứa chuỗi sự kiện lặp lại hoặc nhiều sự kiện bài tập",
+    "query": "BEGIN:VCALENDAR\nBEGIN:VEVENT\nSUMMARY:Quiz 1 Kiến trúc máy tính\nDTSTART:20261114T080000Z\nEND:VEVENT\nBEGIN:VEVENT\nSUMMARY:Báo cáo giữa kỳ Kiến trúc máy tính\nDTSTART:20261122T160000Z\nEND:VEVENT\nEND:VCALENDAR",
+    "expected_route": "SlowPath_AI",
+    "ground_truth": {
+      "events_count": 2,
+      "items": [
+        {
+          "subject": "Kiến trúc máy tính",
+          "type": "Quiz 1",
+          "deadline": "2026-11-14T15:00:00+07:00"
+        },
+        {
+          "subject": "Kiến trúc máy tính",
+          "type": "Báo cáo giữa kỳ",
+          "deadline": "2026-11-22T23:00:00+07:00"
+        }
+      ]
+    }
+  },
+  {
+    "id": "TC_AI_AMBIGUOUS_01",
+    "assigned_member": "Hồ Ngọc Như Ý",
+    "category": "deadline_extraction_edge_case",
+    "description": "Xử lý thông báo thiếu ngày cụ thể (Dùng mốc thời gian tương đối như 'tuần sau')",
+    "query": "Thầy thông báo: Các em nhớ nộp bài tập lớn môn Công nghệ phần mềm vào thứ 6 tuần sau nhé.",
+    "expected_route": "SlowPath_AI",
+    "ground_truth": {
+      "subject": "Công nghệ phần mềm",
+      "deadline_relative": "Thứ 6 tuần sau",
+      "status": "NEEDS_REFERENCE_DATE"
+    }
+  },
+  {
+    "id": "TC_AI_SCHEMA_01",
+    "assigned_member": "Hồ Ngọc Như Ý",
+    "category": "ai_schema_validation",
+    "description": "Kiểm tra ép buộc Gemini API trả về đúng Structured Output Schema JSON",
+    "query": "Trích xuất deadline: Môn AI căn bản nộp bài Assignment 1 lúc 20h00 ngày 30/11/2026.",
+    "expected_route": "SlowPath_AI",
+    "ground_truth": {
+      "schema_match": true,
+      "required_keys": [
+        "subject",
+        "deadline",
+        "content"
+      ]
+    }
+  },
+  {
+    "id": "TC_AI_MOCK_01",
+    "assigned_member": "Hồ Ngọc Như Ý",
+    "category": "ai_offline_mock",
+    "description": "Kiểm thử chế độ MockClient hoạt động chính xác khi không có kết nối Gemini API (Offline/CI)",
+    "query": "MOCK_TEST: Nộp bài Lab 1 Lập trình Python trước 23h59 ngày 10/11/2026.",
+    "expected_route": "SlowPath_AI_Mock",
+    "ground_truth": {
+      "mock_active": true,
+      "subject": "Lập trình Python",
+      "deadline": "2026-11-10T23:59:00"
+    }
+  },
+  {
+    "id": "TC_AI_PERF_01",
+    "assigned_member": "Hồ Ngọc Như Ý",
+    "category": "ai_latency_benchmark",
+    "description": "Đo lường thời gian phản hồi (Latency) của module AI Bóc tách Deadline (Yêu cầu Timeout < 5s)",
+    "query": "Thông báo: Nộp bài tập Giữa kỳ môn An toàn thông tin trước 23h59 ngày 05/12/2026.",
+    "expected_route": "SlowPath_AI",
+    "ground_truth": {
+      "max_allowed_latency_ms": 5000,
+      "metric": "AI_Extraction_Latency"
+    }
+  },
+  {
+    "id": "TC_AI_LONGTEXT_01",
+    "assigned_member": "Hồ Ngọc Như Ý",
+    "category": "deadline_extraction_long",
+    "description": "Bóc tách deadline từ văn bản thông báo dài kèm hướng dẫn quy cách nộp file chi tiết",
+    "query": "Gửi các sinh viên môn Phát triển Ứng dụng Di động. Hạn chót nộp Đề án cuối kỳ là 23h59 ngày 15/12/2026. Các bạn nộp file .zip chứa toàn bộ source code Flutter và file báo cáo .pdf. Tên file theo định dạng MSSV_DeAn.zip. Bài nộp trễ sau hạn trên sẽ bị trừ 50% số điểm.",
+    "expected_route": "SlowPath_AI",
+    "ground_truth": {
+      "subject": "Phát triển Ứng dụng Di động",
+      "deadline": "2026-12-15T23:59:00",
+      "content": "Đề án cuối kỳ (Source code Flutter .zip + Báo cáo .pdf)",
+      "file_format": "MSSV_DeAn.zip"
+    }
+  },
+  {
+    "id": "TC_AI_RECURRING_01",
+    "assigned_member": "Hồ Ngọc Như Ý",
+    "category": "deadline_extraction_recurring",
+    "description": "Trích xuất bài tập có tính chất lặp lại hàng tuần",
+    "query": "Môn Lập trình Hướng đối tượng: Sinh viên nộp bài tập thực hành hàng tuần vào trước 23h59 Chủ Nhật.",
+    "expected_route": "SlowPath_AI",
+    "ground_truth": {
+      "subject": "Lập trình Hướng đối tượng",
+      "recurring_pattern": "Every Sunday at 23:59",
+      "content": "Bài tập thực hành hàng tuần"
+    }
+  }
+]
+    
