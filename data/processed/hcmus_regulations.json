@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0",
-  "mo_ta": "Dữ liệu sạch các quy định chuẩn ngoại ngữ đầu ra, Trường ĐH Khoa học Tự nhiên - ĐHQG-HCM, khóa tuyển 2024. Nguồn: 3 file PDF scan (QĐ 1983, 1984, 1985/QĐ-KHTN).",
-  "ngay_cap_nhat": "2026-10-18",
+  "mo_ta": "Dữ liệu sạch các quy định chuẩn ngoại ngữ đầu ra, Trường ĐH Khoa học Tự nhiên - ĐHQG-HCM, khóa tuyển 2024. Nguồn: 3 file PDF scan (QĐ 1983, 1984, 1985/QĐ-KHTN). Bổ sung QĐ 2464/QĐ-KHTN (11/08/2026) chương trình đại trà và cử nhân tài năng.",
+  "ngay_cap_nhat": "2026-10-23",
   "van_ban": [
     {
       "van_ban_id": "1983_quyetdinh",
@@ -35,7 +35,9 @@
       "hieu_luc_tu": "2024-08-21",
       "het_hieu_luc": null,
       "thay_the_boi": null,
-      "nhom_chuan": "bac4_ielts5"
+      "nhom_chuan": "bac4_ielts5",
+      "khoa_tuyen_tu": 2024,
+      "khoa_tuyen_den": null
     },
     {
       "van_ban_id": "1983_quydinh",
@@ -69,7 +71,9 @@
       "hieu_luc_tu": "2024-08-21",
       "het_hieu_luc": null,
       "thay_the_boi": null,
-      "nhom_chuan": "bac4_ielts5"
+      "nhom_chuan": "bac4_ielts5",
+      "khoa_tuyen_tu": 2024,
+      "khoa_tuyen_den": null
     },
     {
       "van_ban_id": "1984_quyetdinh",
@@ -96,7 +100,9 @@
       "hieu_luc_tu": "2024-08-21",
       "het_hieu_luc": null,
       "thay_the_boi": null,
-      "nhom_chuan": "bac4_ielts5"
+      "nhom_chuan": "bac4_ielts5",
+      "khoa_tuyen_tu": 2024,
+      "khoa_tuyen_den": 2024
     },
     {
       "van_ban_id": "1984_quydinh",
@@ -123,7 +129,9 @@
       "hieu_luc_tu": "2024-08-21",
       "het_hieu_luc": null,
       "thay_the_boi": null,
-      "nhom_chuan": "bac4_ielts5"
+      "nhom_chuan": "bac4_ielts5",
+      "khoa_tuyen_tu": 2024,
+      "khoa_tuyen_den": 2024
     },
     {
       "van_ban_id": "1985_quyetdinh",
@@ -150,7 +158,9 @@
       "hieu_luc_tu": "2024-08-21",
       "het_hieu_luc": null,
       "thay_the_boi": null,
-      "nhom_chuan": "ielts6"
+      "nhom_chuan": "ielts6",
+      "khoa_tuyen_tu": 2024,
+      "khoa_tuyen_den": 2024
     },
     {
       "van_ban_id": "1985_quydinh",
@@ -177,7 +187,75 @@
       "hieu_luc_tu": "2024-08-21",
       "het_hieu_luc": null,
       "thay_the_boi": null,
-      "nhom_chuan": "ielts6"
+      "nhom_chuan": "ielts6",
+      "khoa_tuyen_tu": 2024,
+      "khoa_tuyen_den": 2024
+    },
+    {
+      "van_ban_id": "2464_quyetdinh",
+      "ten_van_ban": "Quyết định ban hành Quy định về việc tổ chức học ngoại ngữ, chuẩn ngoại ngữ trong quá trình học và chuẩn trình độ ngoại ngữ khi tốt nghiệp đại học hệ chính quy chương trình đại trà và chương trình cử nhân tài năng",
+      "loai": "Quyết định",
+      "so_hieu": "2464/QĐ-KHTN",
+      "nguoi_ky": "Nguyễn Trung Nhân (KT. Hiệu trưởng, Phó Hiệu trưởng)",
+      "trang_pdf": [
+        1,
+        1
+      ],
+      "co_quan": "Trường Đại học Khoa học Tự nhiên, ĐHQG-HCM",
+      "chuong_trinh": "đại trà và cử nhân tài năng",
+      "chuong_trinh_ap_dung": [
+        "đại trà",
+        "cử nhân tài năng"
+      ],
+      "chuong_trinh_alias": [
+        "chương trình chuẩn",
+        "đại trà",
+        "cử nhân tài năng",
+        "CNTN"
+      ],
+      "nganh": [],
+      "khoa_tuyen": "2022 trở về sau",
+      "khoa_tuyen_tu": 2022,
+      "khoa_tuyen_den": null,
+      "nhom_chuan": "dai_tra_bac3_cntn_bac4",
+      "file_nguon": "2464.pdf",
+      "ngay_ban_hanh": "2026-08-11",
+      "hieu_luc_tu": "2026-08-11",
+      "het_hieu_luc": null,
+      "thay_the_boi": null
+    },
+    {
+      "van_ban_id": "2464_quydinh",
+      "ten_van_ban": "Quy định về việc tổ chức học ngoại ngữ, chuẩn ngoại ngữ trong quá trình học và chuẩn trình độ ngoại ngữ khi tốt nghiệp đại học hệ chính quy chương trình đại trà và chương trình cử nhân tài năng",
+      "loai": "Quy định",
+      "so_hieu": "2464/QĐ-KHTN",
+      "ban_hanh_kem": "2464_quyetdinh",
+      "trang_pdf": [
+        2,
+        9
+      ],
+      "co_quan": "Trường Đại học Khoa học Tự nhiên, ĐHQG-HCM",
+      "chuong_trinh": "đại trà và cử nhân tài năng",
+      "chuong_trinh_ap_dung": [
+        "đại trà",
+        "cử nhân tài năng"
+      ],
+      "chuong_trinh_alias": [
+        "chương trình chuẩn",
+        "đại trà",
+        "cử nhân tài năng",
+        "CNTN"
+      ],
+      "nganh": [],
+      "khoa_tuyen": "2022 trở về sau",
+      "khoa_tuyen_tu": 2022,
+      "khoa_tuyen_den": null,
+      "nhom_chuan": "dai_tra_bac3_cntn_bac4",
+      "file_nguon": "2464.pdf",
+      "ngay_ban_hanh": "2026-08-11",
+      "hieu_luc_tu": "2026-08-11",
+      "het_hieu_luc": null,
+      "thay_the_boi": null
     },
     {
       "van_ban_id": "stsv2025_ke_hoach_nam_hoc",
@@ -738,6 +816,681 @@
       "trang_end": 4,
       "chu_de": "điều khoản thi hành",
       "text": "Trong quá trình thực hiện, Hiệu trưởng sẽ xem xét và quyết định sửa đổi, bổ sung các quy định nếu có văn bản quy định mới từ Đại học Quốc gia Thành phố Hồ Chí Minh."
+    },
+    {
+      "chunk_id": "2464_quyetdinh_d1-4",
+      "van_ban_id": "2464_quyetdinh",
+      "chuong": null,
+      "dieu": "1-4",
+      "ten_dieu": "Ban hành quy định, phạm vi áp dụng, hiệu lực, thi hành",
+      "khoan": null,
+      "trang_start": 1,
+      "trang_end": 1,
+      "chu_de": "văn bản ban hành QĐ 2464; áp dụng khóa tuyển 2022 trở về sau; hiệu lực kể từ ngày ký",
+      "text": "QUYẾT ĐỊNH\nBan hành Quy định về việc tổ chức học ngoại ngữ, chuẩn ngoại ngữ trong quá trình học và chuẩn trình độ ngoại ngữ khi tốt nghiệp đại học hệ chính quy chương trình đại trà và chương trình cử nhân tài năng\nHIỆU TRƯỞNG TRƯỜNG ĐẠI HỌC KHOA HỌC TỰ NHIÊN\nCăn cứ Quyết định số 26/2014/QĐ-TTg ngày 26 tháng 03 năm 2014 của Thủ tướng Chính phủ về việc ban hành Quy chế tổ chức và hoạt động của Đại học Quốc gia và các cơ sở giáo dục đại học thành viên;\nCăn cứ Thông tư số 33/2026/TT-BGDĐT ngày 15 tháng 04 năm 2026 của Bộ Giáo dục và Đào tạo về khung năng lực ngoại ngữ dùng cho Việt Nam;\nCăn cứ Quyết định số 170/ĐHQG-ĐH ngày 27 tháng 02 năm 2018 của Giám đốc Đại học Quốc gia Thành phố Hồ Chí Minh về việc ban hành Quy chế Chuẩn trình độ ngoại ngữ tại Đại học Quốc gia Thành phố Hồ Chí Minh;\nCăn cứ Quyết định số 1342/QĐ-ĐHQG ngày 30 tháng 9 năm 2022 của Giám đốc Đại học Quốc gia Thành phố Hồ Chí Minh về việc ban hành Quy chế đào tạo trình độ đại học;\nTheo đề nghị của Trưởng phòng Phòng Đào tạo.\nQUYẾT ĐỊNH:\nĐiều 1. Ban hành kèm theo Quyết định này Quy định về việc tổ chức học ngoại ngữ, chuẩn ngoại ngữ trong quá trình học và chuẩn trình độ ngoại ngữ khi tốt nghiệp đại học hệ chính quy chương trình đại trà và chương trình cử nhân tài năng tại Trường Đại học Khoa học tự nhiên, ĐHQG-HCM.\nĐiều 2. Quyết định này áp dụng cho sinh viên chương trình đại trà và cử nhân tài năng từ khóa tuyển năm 2022 trở về sau.\nĐiều 3. Quyết định này có hiệu lực kể từ ngày ký.\nĐiều 4. Trưởng các phòng chức năng, các đơn vị, cá nhân và sinh viên có liên quan chịu trách nhiệm thi hành quyết định này."
+    },
+    {
+      "chunk_id": "2464_quydinh_d1",
+      "van_ban_id": "2464_quydinh",
+      "chuong": null,
+      "dieu": "1",
+      "ten_dieu": "Phạm vi điều chỉnh và đối tượng áp dụng",
+      "khoan": null,
+      "trang_start": 2,
+      "trang_end": 2,
+      "chu_de": "phạm vi và đối tượng áp dụng; ngoại ngữ là tiếng Anh; chuẩn ngoại ngữ đầu ra",
+      "text": "1. Văn bản này quy định về việc tổ chức học ngoại ngữ, chuẩn ngoại ngữ trong quá trình học và chuẩn ngoại ngữ khi tốt nghiệp trình độ đại học hệ chính quy chương trình đại trà và chương trình cử nhân tài năng.\n2. Quy định này áp dụng đối với sinh viên (SV) đại học hệ chính quy chương trình đại trà và chương trình cử nhân tài năng tại Trường Đại học Khoa học tự nhiên, Đại học Quốc gia Thành phố Hồ Chí Minh (Trường ĐH KHTN).\n3. Ngoại ngữ được lựa chọn để tổ chức giảng dạy theo quy định này là tiếng Anh.\n4. Trong quy định này, chuẩn trình độ ngoại ngữ khi tốt nghiệp trình độ đại học còn được gọi là chuẩn ngoại ngữ đầu ra."
+    },
+    {
+      "chunk_id": "2464_quydinh_d2_k1",
+      "van_ban_id": "2464_quydinh",
+      "chuong": null,
+      "dieu": "2",
+      "ten_dieu": "Quy định về tổ chức học ngoại ngữ đối với chương trình đại trà và chương trình cử nhân tài năng",
+      "khoan": "1",
+      "trang_start": 2,
+      "trang_end": 2,
+      "chu_de": "phải học bốn học phần Anh văn khi chưa có chứng chỉ",
+      "text": "1. Đối với SV chưa có chứng chỉ đạt chuẩn ngoại ngữ được quy định tại Điều 7 quy định này phải đăng ký học bốn học phần Anh văn theo cấp độ tăng dần trong quá trình học nhằm tích lũy được lượng kiến thức tiếng Anh cần thiết để học tập và nghiên cứu kiến thức chuyên môn."
+    },
+    {
+      "chunk_id": "2464_quydinh_d2_k2",
+      "van_ban_id": "2464_quydinh",
+      "chuong": null,
+      "dieu": "2",
+      "ten_dieu": "Quy định về tổ chức học ngoại ngữ đối với chương trình đại trà và chương trình cử nhân tài năng",
+      "khoan": "2",
+      "trang_start": 2,
+      "trang_end": 2,
+      "chu_de": "các học phần Anh văn 1 2 3 4; kiến thức bổ trợ ngoài chương trình đào tạo",
+      "text": "2. Các học phần Anh văn bao gồm: Anh văn 1; Anh văn 2; Anh văn 3 và Anh văn 4. Các học phần Anh văn này là kiến thức bổ trợ, được thiết kế ngoài chương trình đào tạo của các ngành học trình độ đại học hệ chính quy."
+    },
+    {
+      "chunk_id": "2464_quydinh_d2_k3",
+      "van_ban_id": "2464_quydinh",
+      "chuong": null,
+      "dieu": "2",
+      "ten_dieu": "Quy định về tổ chức học ngoại ngữ đối với chương trình đại trà và chương trình cử nhân tài năng",
+      "khoan": "3",
+      "trang_start": 2,
+      "trang_end": 3,
+      "chu_de": "kế hoạch giảng dạy Anh văn theo học kỳ; mã học phần; số tín chỉ; số tiết; Anh văn bổ túc",
+      "text": "3. Kế hoạch tổ chức giảng dạy các học phần Anh văn được phân bố theo các học kỳ tương ứng với mỗi khóa tuyển như sau:\nBảng (cột: STT | Mã học phần | Tên học phần | Số tín chỉ | Số tiết | Kế hoạch đào tạo: Nếu SV đạt 5,0 điểm trở lên trong kỳ kiểm tra AV đầu khóa / Nếu SV không đạt trong kỳ kiểm tra AV đầu khóa):\n1 | (không có mã) | Anh văn bổ túc | 3 tín chỉ | 60 tiết | (không có) | HK1\n2 | ADD00031 | Anh văn 1 | 3 tín chỉ | 60 tiết | HK1 | HK2\n3 | ADD00032 | Anh văn 2 | 3 tín chỉ | 60 tiết | HK2 | HK3\n4 | ADD00033 | Anh văn 3 | 3 tín chỉ | 60 tiết | HK3 | HK4\n5 | ADD00034 | Anh văn 4 | 3 tín chỉ | 60 tiết | HK4 | HK5",
+      "bang": {
+        "cot": [
+          "stt",
+          "ma_hoc_phan",
+          "ten_hoc_phan",
+          "so_tin_chi",
+          "so_tiet",
+          "hoc_ky_neu_dat_5.0_kiem_tra_dau_khoa",
+          "hoc_ky_neu_khong_dat_kiem_tra_dau_khoa"
+        ],
+        "dong": [
+          [
+            1,
+            null,
+            "Anh văn bổ túc",
+            3,
+            60,
+            null,
+            "HK1"
+          ],
+          [
+            2,
+            "ADD00031",
+            "Anh văn 1",
+            3,
+            60,
+            "HK1",
+            "HK2"
+          ],
+          [
+            3,
+            "ADD00032",
+            "Anh văn 2",
+            3,
+            60,
+            "HK2",
+            "HK3"
+          ],
+          [
+            4,
+            "ADD00033",
+            "Anh văn 3",
+            3,
+            60,
+            "HK3",
+            "HK4"
+          ],
+          [
+            5,
+            "ADD00034",
+            "Anh văn 4",
+            3,
+            60,
+            "HK4",
+            "HK5"
+          ]
+        ]
+      }
+    },
+    {
+      "chunk_id": "2464_quydinh_d2_k4",
+      "van_ban_id": "2464_quydinh",
+      "chuong": null,
+      "dieu": "2",
+      "ten_dieu": "Quy định về tổ chức học ngoại ngữ đối với chương trình đại trà và chương trình cử nhân tài năng",
+      "khoan": "4",
+      "trang_start": 3,
+      "trang_end": 3,
+      "chu_de": "kiểm tra và xếp lớp Anh văn đầu khóa; lớp bổ túc",
+      "text": "4. Kiểm tra và xếp lớp Anh văn đầu khóa học\na) Đầu khóa học, SV chưa có chứng chỉ để xét miễn học Anh văn theo Điều 7 quy định này phải tham gia đợt kiểm tra tiếng Anh đầu khóa do Trường tổ chức.\nb) Căn cứ kết quả kiểm tra Anh văn đầu khóa, Trường sẽ lập các danh sách xếp lớp học Anh văn như sau:\n- SV được miễn học Anh văn 1.\n- SV đủ trình độ tiếng Anh để được học Anh văn 1.\n- SV không đủ trình độ học Anh văn 1, phải học lớp bổ túc Anh văn."
+    },
+    {
+      "chunk_id": "2464_quydinh_d2_k5",
+      "van_ban_id": "2464_quydinh",
+      "chuong": null,
+      "dieu": "2",
+      "ten_dieu": "Quy định về tổ chức học ngoại ngữ đối với chương trình đại trà và chương trình cử nhân tài năng",
+      "khoan": "5",
+      "trang_start": 3,
+      "trang_end": 3,
+      "chu_de": "điều kiện tiên quyết các học phần Anh văn; đăng ký cùng lúc hai học phần năm thứ 4",
+      "text": "5. Quy định về điều kiện tiên quyết đối với các học phần Anh văn\na) Học phần tiên quyết của Anh văn 2 là Anh văn 1.\nb) Học phần tiên quyết của Anh văn 3 là Anh văn 2.\nc) Học phần tiên quyết của Anh văn 4 là Anh văn 3.\nd) Đối với sinh viên đang năm thứ 4, Trường có thể cho đăng ký cùng một lúc hai học phần anh văn có trình độ liên tiếp nhau (Ví dụ: đăng ký cùng một học kỳ Anh văn 1 và Anh văn 2; hoặc đăng ký cùng một học kỳ Anh văn 2 và Anh văn 3; hoặc đăng ký cùng một học kỳ Anh văn 3 và Anh văn 4). Riêng đối với trường hợp học cùng một kỳ nhiều hơn 02 học phần Anh văn thì sinh viên phải nộp đơn cho Phòng Đào tạo để xem xét từng trường hợp tùy vào việc đáp ứng năng lực học tập của sinh viên."
+    },
+    {
+      "chunk_id": "2464_quydinh_d2_k6",
+      "van_ban_id": "2464_quydinh",
+      "chuong": null,
+      "dieu": "2",
+      "ten_dieu": "Quy định về tổ chức học ngoại ngữ đối với chương trình đại trà và chương trình cử nhân tài năng",
+      "khoan": "6",
+      "trang_start": 3,
+      "trang_end": 3,
+      "chu_de": "kết quả Anh văn không vào bảng điểm; không xét học bổng; không miễn giảm học phí; cấp chứng nhận",
+      "text": "6. Kết quả thi các học phần Anh văn không đưa vào bảng điểm của SV, không sử dụng để xét học bổng và miễn giảm học phí. Khi có SV yêu cầu, Trường sẽ cấp chứng nhận cho SV."
+    },
+    {
+      "chunk_id": "2464_quydinh_d3_k1",
+      "van_ban_id": "2464_quydinh",
+      "chuong": null,
+      "dieu": "3",
+      "ten_dieu": "Quy định miễn học các học phần Anh văn",
+      "khoan": "1",
+      "trang_start": 3,
+      "trang_end": 3,
+      "chu_de": "miễn học 04 học phần Anh văn; nộp chứng chỉ; thi đánh giá trình độ tiếng Anh nội bộ 5,0",
+      "text": "1. SV được miễn học 04 học phần Anh văn nếu SV đã nộp chứng chỉ theo quy định tại Điều 7 quy định này hoặc SV đạt từ 5,0 (năm) điểm trở lên trong kỳ thi đánh giá trình độ tiếng Anh nội bộ do Trung tâm Ngoại ngữ của Trường tổ chức (sau đây gọi tắt là kỳ thi đánh giá trình độ tiếng Anh nội bộ)."
+    },
+    {
+      "chunk_id": "2464_quydinh_d3_k2",
+      "van_ban_id": "2464_quydinh",
+      "chuong": null,
+      "dieu": "3",
+      "ten_dieu": "Quy định miễn học các học phần Anh văn",
+      "khoan": "2",
+      "trang_start": 4,
+      "trang_end": 4,
+      "chu_de": "miễn học Anh văn 1; kết quả thi Anh văn đầu vào từ 8.0",
+      "text": "2. SV được miễn học học phần Anh văn 1 nếu sinh viên có kết quả thi Anh văn đầu vào đạt từ 8.0 điểm trở lên."
+    },
+    {
+      "chunk_id": "2464_quydinh_d4",
+      "van_ban_id": "2464_quydinh",
+      "chuong": null,
+      "dieu": "4",
+      "ten_dieu": "Quy định về tổ chức kỳ thi đánh giá trình độ tiếng Anh nội bộ",
+      "khoan": null,
+      "trang_start": 4,
+      "trang_end": 4,
+      "chu_de": "kỳ thi đánh giá trình độ tiếng Anh nội bộ; Trung tâm Ngoại ngữ; đối tượng dự thi; số đợt thi",
+      "text": "a) Đối tượng được tham gia dự thi: SV đại học hệ chính quy chương trình đại trà và chương trình cử nhân tài năng từ khóa tuyển 2022 trở về sau.\nb) Số đợt tổ chức thi: Căn cứ vào nhu cầu của SV, Trung tâm Ngoại ngữ sẽ có kế hoạch tổ chức phù hợp.\nc) Các quy định liên quan đến tổ chức kỳ thi đánh giá trình độ tiếng Anh nội bộ do Trung tâm Ngoại ngữ thực hiện và thông báo để SV nắm thông tin."
+    },
+    {
+      "chunk_id": "2464_quydinh_d5_k1",
+      "van_ban_id": "2464_quydinh",
+      "chuong": null,
+      "dieu": "5",
+      "ten_dieu": "Đánh giá kết quả học tập các học phần Anh văn",
+      "khoan": "1",
+      "trang_start": 4,
+      "trang_end": 4,
+      "chu_de": "điểm đánh giá quá trình 40%; chuyên cần; bài tập online Richmond",
+      "text": "1. Điểm đánh giá quá trình chiếm 40% điểm tổng kết học phần, các tiêu chí đánh giá như sau:\nBảng (Tiêu chí | Nội dung | Tỷ lệ điểm):\nĐánh giá quá trình học | - Chuyên cần; - Đánh giá thường xuyên: sinh viên tham gia các hoạt động học tập trên lớp (class participation, individual work, pair work, group work hoặc mini tests). | 20%\nBài tập online | - Sinh viên hoàn thành các bài tập được giao qua Richmond Learning Flatform | 20%",
+      "bang": {
+        "cot": [
+          "tieu_chi",
+          "noi_dung",
+          "ty_le"
+        ],
+        "dong": [
+          [
+            "Đánh giá quá trình học",
+            "Chuyên cần; Đánh giá thường xuyên (class participation, individual work, pair work, group work hoặc mini tests)",
+            "20%"
+          ],
+          [
+            "Bài tập online",
+            "Hoàn thành các bài tập được giao qua Richmond Learning Flatform",
+            "20%"
+          ]
+        ]
+      }
+    },
+    {
+      "chunk_id": "2464_quydinh_d5_k2",
+      "van_ban_id": "2464_quydinh",
+      "chuong": null,
+      "dieu": "5",
+      "ten_dieu": "Đánh giá kết quả học tập các học phần Anh văn",
+      "khoan": "2",
+      "trang_start": 4,
+      "trang_end": 4,
+      "chu_de": "vắng quá 03 buổi học bị điểm quá trình bằng 0; mất 20% điểm",
+      "text": "2. Sinh viên vắng quá 03 buổi học sẽ có điểm đánh giá quá trình bằng không (0), tức là mất 20% điểm tổng kết."
+    },
+    {
+      "chunk_id": "2464_quydinh_d5_k3",
+      "van_ban_id": "2464_quydinh",
+      "chuong": null,
+      "dieu": "5",
+      "ten_dieu": "Đánh giá kết quả học tập các học phần Anh văn",
+      "khoan": "3",
+      "trang_start": 4,
+      "trang_end": 4,
+      "chu_de": "điểm thi kết thúc học phần 60%; tỷ lệ Nghe Nói Đọc Viết từng học phần",
+      "text": "3. Điểm thi kết thúc học phần chiếm 60% điểm tổng kết học phần, các tiêu chí đánh giá như sau:\nBảng (Tên học phần | Nghe | Nói | Đọc | Viết):\nAnh văn bổ túc | (không có) | (không có) | Đọc và Viết gộp chung: 60%\nAnh văn 1 | 10% | 15% | 20% | 15%\nAnh văn 2 | 10% | 15% | 20% | 15%\nAnh văn 3 | 15% | 15% | 15% | 15%\nAnh văn 4 | 15% | 15% | 15% | 15%",
+      "bang": {
+        "cot": [
+          "ten_hoc_phan",
+          "nghe",
+          "noi",
+          "doc",
+          "viet"
+        ],
+        "dong": [
+          [
+            "Anh văn bổ túc",
+            null,
+            null,
+            "60% (ô gộp Đọc-Viết)",
+            "60% (ô gộp Đọc-Viết)"
+          ],
+          [
+            "Anh văn 1",
+            "10%",
+            "15%",
+            "20%",
+            "15%"
+          ],
+          [
+            "Anh văn 2",
+            "10%",
+            "15%",
+            "20%",
+            "15%"
+          ],
+          [
+            "Anh văn 3",
+            "15%",
+            "15%",
+            "15%",
+            "15%"
+          ],
+          [
+            "Anh văn 4",
+            "15%",
+            "15%",
+            "15%",
+            "15%"
+          ]
+        ]
+      }
+    },
+    {
+      "chunk_id": "2464_quydinh_d5_k4",
+      "van_ban_id": "2464_quydinh",
+      "chuong": null,
+      "dieu": "5",
+      "ten_dieu": "Đánh giá kết quả học tập các học phần Anh văn",
+      "khoan": "4",
+      "trang_start": 5,
+      "trang_end": 5,
+      "chu_de": "điểm tổng kết học phần Anh văn; phải dự đủ 4 kỹ năng; điểm đạt từ 5,0",
+      "text": "4. Điểm tổng kết học phần\na) Điểm tổng kết mỗi học phần Anh văn bao gồm: điểm quá trình cộng với điểm cuối kỳ.\nb) Sinh viên phải tham dự đủ 4 kỹ năng (Nghe, Nói, Đọc, Viết) trong kỳ thi cuối kỳ mới được tính điểm tổng kết học phần.\nc) Điểm đạt là điểm từ 5,0 điểm trở lên."
+    },
+    {
+      "chunk_id": "2464_quydinh_d5_k5",
+      "van_ban_id": "2464_quydinh",
+      "chuong": null,
+      "dieu": "5",
+      "ten_dieu": "Đánh giá kết quả học tập các học phần Anh văn",
+      "khoan": "5",
+      "trang_start": 5,
+      "trang_end": 5,
+      "chu_de": "bài thi cuối kỳ Anh văn bổ túc 02 kỹ năng Đọc-Viết; Anh văn 1 2 3 4 gồm bài Nói và bài tổng hợp",
+      "text": "5. Bài thi cuối kỳ\na) Đối với học phần Anh văn bổ túc: Bài thi cuối kỳ là bài thi gồm 02 kỹ năng Đọc-Viết.\nb) Đối với học phần Anh văn 1, Anh văn 2, Anh văn 3 và Anh văn 4: Bài thi cuối kỳ gồm 01 bài thi Nói và 01 bài thi tổng hợp (Nghe-Đọc-Viết)."
+    },
+    {
+      "chunk_id": "2464_quydinh_d6_k1",
+      "van_ban_id": "2464_quydinh",
+      "chuong": null,
+      "dieu": "6",
+      "ten_dieu": "Chuẩn tiếng Anh trong quá trình học đối với chương trình đại trà và chương trình cử nhân tài năng",
+      "khoan": "1",
+      "trang_start": 5,
+      "trang_end": 5,
+      "chu_de": "chuẩn tiếng Anh trong quá trình học là gì; điều kiện học các học phần chuyên ngành",
+      "text": "1. Chuẩn tiếng Anh trong quá trình học là yêu cầu tối thiểu về kiến thức, kỹ năng tiếng Anh mà sinh viên cần đạt được để hỗ trợ cho hoạt động học tập chuyên môn của ngành đào tạo được Trường xét đến trong thời gian SV tham gia học các học phần thuộc giai đoạn chuyên ngành (kể cả các học phần thuộc kiến thức tốt nghiệp), còn được gọi là chuẩn tiếng Anh để được tham gia học các học phần chuyên ngành."
+    },
+    {
+      "chunk_id": "2464_quydinh_d6_k2",
+      "van_ban_id": "2464_quydinh",
+      "chuong": null,
+      "dieu": "6",
+      "ten_dieu": "Chuẩn tiếng Anh trong quá trình học đối với chương trình đại trà và chương trình cử nhân tài năng",
+      "khoan": "2",
+      "trang_start": 5,
+      "trang_end": 5,
+      "chu_de": "ba điều kiện để đăng ký học phần chuyên ngành: hoàn tất Anh văn 1-4, nộp chứng chỉ, thi nội bộ từ 5,0",
+      "text": "2. Chuẩn tiếng Anh trong quá trình học được quy định như sau:\nĐể được xét đăng ký và học các học phần chuyên ngành, SV phải thỏa một trong ba điều kiện như sau:\na) SV hoàn tất bốn học phần Anh văn trong chương trình đào tạo gồm: Anh văn 1, Anh văn 2, Anh văn 3 và Anh văn 4.\nb) SV đã nộp chứng chỉ theo quy định tại Điều 7 quy định này.\nc) SV đạt từ 5,0 (năm) điểm trở lên trong kết quả kỳ thi đánh giá trình độ tiếng Anh nội bộ do Trung tâm Ngoại ngữ của Trường tổ chức."
+    },
+    {
+      "chunk_id": "2464_quydinh_d6_k3",
+      "van_ban_id": "2464_quydinh",
+      "chuong": null,
+      "dieu": "6",
+      "ten_dieu": "Chuẩn tiếng Anh trong quá trình học đối với chương trình đại trà và chương trình cử nhân tài năng",
+      "khoan": "3",
+      "trang_start": 5,
+      "trang_end": 5,
+      "chu_de": "thời hạn đạt chuẩn tiếng Anh trong quá trình học: chậm nhất cuối học kỳ thứ 6",
+      "text": "3. Chậm nhất là cuối học kỳ thứ 6, SV phải đạt chuẩn tiếng Anh trong quá trình học theo khoản 2 Điều này."
+    },
+    {
+      "chunk_id": "2464_quydinh_d6_k4",
+      "van_ban_id": "2464_quydinh",
+      "chuong": null,
+      "dieu": "6",
+      "ten_dieu": "Chuẩn tiếng Anh trong quá trình học đối với chương trình đại trà và chương trình cử nhân tài năng",
+      "khoan": "4",
+      "trang_start": 5,
+      "trang_end": 5,
+      "chu_de": "không đạt chuẩn tiếng Anh trong quá trình học thì không được đăng ký học phần chuyên ngành",
+      "text": "4. Đối với SV không đạt chuẩn tiếng Anh theo quy định tại khoản 2 và khoản 3 Điều này, SV không được tiếp tục đăng ký và học các học phần chuyên ngành."
+    },
+    {
+      "chunk_id": "2464_quydinh_d7_k1",
+      "van_ban_id": "2464_quydinh",
+      "chuong": null,
+      "dieu": "7",
+      "ten_dieu": "Chuẩn ngoại ngữ đầu ra trình độ đại học hệ chính quy chương trình đại trà",
+      "khoan": "1",
+      "trang_start": 5,
+      "trang_end": 6,
+      "chu_de": "chuẩn đầu ra tiếng Anh đại trà bậc 3/6; Thông tư 33/2026/TT-BGDĐT",
+      "text": "1. Chuẩn ngoại ngữ đầu ra của sinh viên tốt nghiệp trình độ đại học hệ chính quy chương trình đại trà là ngoại ngữ tiếng Anh và phải đạt tối thiểu bậc 3/6 theo khung năng lực ngoại ngữ 6 bậc dùng cho Việt Nam được quy định tại Thông tư số 33/2026/TT-BGDĐT ngày 15 tháng 04 năm 2026 của Bộ Giáo dục và Đào tạo về khung năng lực ngoại ngữ dùng cho Việt Nam (viết tắt là Thông tư TT33/2026) và trên cơ sở tham chiếu theo Quyết định số 170/QĐ-ĐHQG ngày 27 tháng 02 năm 2018 của Giám đốc ĐHQG-HCM về việc ban hành Quy chế chuẩn trình độ ngoại ngữ tại ĐHQG-HCM.",
+      "pham_vi": [
+        {
+          "chuong_trinh": [
+            "đại trà"
+          ]
+        },
+        {
+          "chuong_trinh": [
+            "cử nhân tài năng"
+          ],
+          "khoa_tuyen_tu": null,
+          "khoa_tuyen_den": 2022
+        }
+      ]
+    },
+    {
+      "chunk_id": "2464_quydinh_d7_k2",
+      "van_ban_id": "2464_quydinh",
+      "chuong": null,
+      "dieu": "7",
+      "ten_dieu": "Chuẩn ngoại ngữ đầu ra trình độ đại học hệ chính quy chương trình đại trà",
+      "khoan": "2",
+      "trang_start": 6,
+      "trang_end": 6,
+      "chu_de": "chứng chỉ tương đương bậc 3/6: IELTS 4.5, TOEFL iBT 45, ITP 450, CBT 133, TOEIC, PET, BEC, BULATS",
+      "text": "2. Đối với chuẩn trình độ ngoại ngữ đầu ra bằng tiếng Anh, các chứng chỉ ngoại ngữ tiếng Anh được Trường ĐH KHTN công nhận tương đương bậc 3/6 nếu trên chứng chỉ của sinh viên có điểm ở mức tối thiểu như sau:\na) Chứng chỉ IELTS 4.5 do British Council hoặc IDP Australia cấp.\nb) Chứng chỉ TOEFL(iBT) 45 do ETS cấp.\nc) Chứng chỉ TOEFL(ITP) 450 do ETS cấp.\nd) Chứng chỉ TOEFL(CBT) 133 do ETS cấp.\ne) TOEIC 4 kỹ năng: 450 Nghe-Đọc và 181 Nói-Viết do ETS cấp.\nf) Chứng chỉ PET do Cambridge cấp đạt từ mức B1 Preliminary trở lên hoặc đạt từ 140 điểm trở lên.\ng) Chứng chỉ BEC Preliminary do Cambridge Assessment cấp.\nh) Chứng chỉ BULATS 40 do Cambridge Assessment cấp.\ni) Chứng chỉ Bậc 3 theo Khung năng lực ngoại ngữ 6 bậc tại quy định của Thông tư TT33/2026 và được Bộ Giáo dục và Đào tạo công nhận chứng chỉ.",
+      "chung_chi_toi_thieu": {
+        "IELTS": "4.5 (British Council hoặc IDP Australia cấp)",
+        "TOEFL_iBT": "45 (ETS cấp)",
+        "TOEFL_ITP": "450 (ETS cấp)",
+        "TOEFL_CBT": "133 (ETS cấp)",
+        "TOEIC_4_ky_nang": "450 Nghe-Đọc và 181 Nói-Viết (ETS cấp)",
+        "PET": "từ mức B1 Preliminary trở lên hoặc từ 140 điểm trở lên (Cambridge cấp)",
+        "BEC_Preliminary": "(Cambridge Assessment cấp)",
+        "BULATS": "40 (Cambridge Assessment cấp)",
+        "Bac_3_VN": "Chứng chỉ Bậc 3 theo Khung năng lực ngoại ngữ 6 bậc (TT33/2026), được Bộ GD&ĐT công nhận"
+      },
+      "pham_vi": [
+        {
+          "chuong_trinh": [
+            "đại trà"
+          ]
+        },
+        {
+          "chuong_trinh": [
+            "cử nhân tài năng"
+          ],
+          "khoa_tuyen_tu": null,
+          "khoa_tuyen_den": 2022
+        }
+      ]
+    },
+    {
+      "chunk_id": "2464_quydinh_d7_k3",
+      "van_ban_id": "2464_quydinh",
+      "chuong": null,
+      "dieu": "7",
+      "ten_dieu": "Chuẩn ngoại ngữ đầu ra trình độ đại học hệ chính quy chương trình đại trà",
+      "khoan": "3",
+      "trang_start": 6,
+      "trang_end": 6,
+      "chu_de": "văn bằng tốt nghiệp đại học ngành ngôn ngữ tiếng Anh được công nhận đạt chuẩn",
+      "text": "3. Văn bằng tốt nghiệp đại học về ngôn ngữ tiếng Anh: Theo quyết định số 170/QĐ-ĐHQG ngày 27 tháng 02 năm 2018 của Giám đốc ĐHQG-HCM về việc ban hành Quy chế chuẩn trình độ ngoại ngữ tại ĐHQG-HCM.",
+      "pham_vi": [
+        {
+          "chuong_trinh": [
+            "đại trà"
+          ]
+        },
+        {
+          "chuong_trinh": [
+            "cử nhân tài năng"
+          ],
+          "khoa_tuyen_tu": null,
+          "khoa_tuyen_den": 2022
+        }
+      ]
+    },
+    {
+      "chunk_id": "2464_quydinh_d7_k4",
+      "van_ban_id": "2464_quydinh",
+      "chuong": null,
+      "dieu": "7",
+      "ten_dieu": "Chuẩn ngoại ngữ đầu ra trình độ đại học hệ chính quy chương trình đại trà",
+      "khoan": "4",
+      "trang_start": 6,
+      "trang_end": 6,
+      "chu_de": "nộp chứng chỉ trước khi nộp hồ sơ xét tốt nghiệp",
+      "text": "4. SV phải nộp chứng chỉ đạt chuẩn trình độ ngoại ngữ đầu ra theo khoản 2 hoặc khoản 3 Điều này trước khi nộp hồ sơ xét tốt nghiệp trình độ đại học chương trình đại trà.",
+      "pham_vi": [
+        {
+          "chuong_trinh": [
+            "đại trà"
+          ]
+        },
+        {
+          "chuong_trinh": [
+            "cử nhân tài năng"
+          ],
+          "khoa_tuyen_tu": null,
+          "khoa_tuyen_den": 2022
+        }
+      ]
+    },
+    {
+      "chunk_id": "2464_quydinh_d8_k1",
+      "van_ban_id": "2464_quydinh",
+      "chuong": null,
+      "dieu": "8",
+      "ten_dieu": "Chuẩn ngoại ngữ đầu ra trình độ đại học hệ chính quy chương trình cử nhân tài năng",
+      "khoan": "1",
+      "trang_start": 6,
+      "trang_end": 6,
+      "chu_de": "cử nhân tài năng khóa tuyển 2022 trở về trước áp dụng chuẩn như đại trà (Điều 7)",
+      "text": "1. Sinh viên từ khóa tuyển 2022 trở về trước: Chuẩn ngoại ngữ đầu ra áp dụng tại Điều 7 quy định này",
+      "chuong_trinh_ap_dung": [
+        "cử nhân tài năng"
+      ],
+      "khoa_tuyen_tu": null,
+      "khoa_tuyen_den": 2022
+    },
+    {
+      "chunk_id": "2464_quydinh_d8_k2",
+      "van_ban_id": "2464_quydinh",
+      "chuong": null,
+      "dieu": "8",
+      "ten_dieu": "Chuẩn ngoại ngữ đầu ra trình độ đại học hệ chính quy chương trình cử nhân tài năng",
+      "khoan": "2",
+      "trang_start": 6,
+      "trang_end": 6,
+      "chu_de": "cử nhân tài năng khóa tuyển 2023 trở về sau chuẩn đầu ra bậc 4/6",
+      "text": "2. Sinh viên từ khóa tuyển 2023 trở về sau: Chuẩn ngoại ngữ đầu ra của sinh viên tốt nghiệp trình độ đại học hệ chính quy chương trình cử nhân tài năng là ngoại ngữ tiếng Anh và phải đạt tối thiểu bậc 4/6 theo khung năng lực ngoại ngữ 6 bậc dùng cho Việt Nam được quy định tại Thông tư số 33/2026/TT-BGDĐT và trên cơ sở tham chiếu theo Quyết định số 170/QĐ-ĐHQG ngày 27 tháng 02 năm 2018 của Giám đốc ĐHQG-HCM về việc ban hành Quy chế chuẩn trình độ ngoại ngữ tại ĐHQG-HCM.",
+      "chuong_trinh_ap_dung": [
+        "cử nhân tài năng"
+      ],
+      "khoa_tuyen_tu": 2023,
+      "khoa_tuyen_den": null
+    },
+    {
+      "chunk_id": "2464_quydinh_d8_k3",
+      "van_ban_id": "2464_quydinh",
+      "chuong": null,
+      "dieu": "8",
+      "ten_dieu": "Chuẩn ngoại ngữ đầu ra trình độ đại học hệ chính quy chương trình cử nhân tài năng",
+      "khoan": "3",
+      "trang_start": 6,
+      "trang_end": 7,
+      "chu_de": "chứng chỉ tương đương bậc 4/6: IELTS 5.0, TOEFL iBT 61, TOEIC 840, FCE, BEC Vantage, BULATS 60",
+      "text": "3. Đối với chuẩn trình độ ngoại ngữ đầu ra bằng tiếng Anh, các chứng chỉ ngoại ngữ tiếng Anh được Trường ĐH KHTN công nhận tương đương bậc 4/6 nếu trên chứng chỉ của sinh viên có điểm ở mức tối thiểu như sau:\na) Chứng chỉ IELTS 5.0 do British Council hoặc IDP Australia cấp.\nb) Chứng chỉ TOEFL (iBT) 61 do ETS cấp.\nc) Chứng chỉ TOEIC 4 kỹ năng đạt 840 điểm do ETS cấp, trong đó gồm: tối thiểu 600 điểm Nghe-Đọc, 240 điểm Nói – Viết.\nd) Chứng chỉ FCE do Cambridge cấp đạt mức B2 First trở lên hoặc đạt từ 160 điểm trở lên.\ne) Chứng chỉ BEC Busines Vantage do Cambridge Assessment cấp từ cấp độ B2 trở lên.\nf) Chứng chỉ BULATS 60 do Cambridge Assessment cấp.\ng) Chứng chỉ Bậc 4 theo Khung năng lực ngoại ngữ 6 bậc tại quy định của Thông tư TT33/2026 và được Bộ Giáo dục và Đào tạo công nhận chứng chỉ.\nh) Văn bằng tốt nghiệp đại học ngôn ngữ tiếng Anh được ĐHQG-HCM công nhận tại điểm a khoản 1 Điều 5 quyết định số 170/QĐ-ĐHQG ngày 27 tháng 02 năm 2018 của Giám đốc ĐHQG-HCM về việc ban hành Quy chế chuẩn trình độ ngoại ngữ tại ĐHQG-HCM.",
+      "chuong_trinh_ap_dung": [
+        "cử nhân tài năng"
+      ],
+      "khoa_tuyen_tu": 2023,
+      "khoa_tuyen_den": null,
+      "chung_chi_toi_thieu": {
+        "IELTS": "5.0 (British Council hoặc IDP Australia cấp)",
+        "TOEFL_iBT": "61 (ETS cấp)",
+        "TOEIC_4_ky_nang": "840 (tối thiểu 600 Nghe-Đọc, 240 Nói-Viết) (ETS cấp)",
+        "FCE": "B2 First trở lên hoặc từ 160 điểm trở lên (Cambridge cấp)",
+        "BEC_Busines_Vantage": "từ cấp độ B2 trở lên (Cambridge Assessment cấp)",
+        "BULATS": "60 (Cambridge Assessment cấp)",
+        "Bac_4_VN": "Chứng chỉ Bậc 4 theo Khung năng lực ngoại ngữ 6 bậc (TT33/2026), được Bộ GD&ĐT công nhận",
+        "Van_bang_Ngon_ngu_Anh": "Văn bằng tốt nghiệp đại học ngôn ngữ tiếng Anh được ĐHQG-HCM công nhận"
+      }
+    },
+    {
+      "chunk_id": "2464_quydinh_d9",
+      "van_ban_id": "2464_quydinh",
+      "chuong": null,
+      "dieu": "9",
+      "ten_dieu": "Thời gian và thủ tục xét đạt chuẩn ngoại ngữ trong quá trình học, đạt chuẩn đầu ra ngoại ngữ đối với chương trình đại trà",
+      "khoan": null,
+      "trang_start": 7,
+      "trang_end": 7,
+      "chu_de": "thời hạn nộp chứng chỉ; nộp một lần duy nhất; miễn thi đầu khóa; miễn học Anh văn; học kỳ thứ 7; xét tốt nghiệp",
+      "text": "SV chương trình đại trà nộp chứng chỉ xét đạt chuẩn ngoại ngữ trong quá trình học hoặc đạt chuẩn đầu ra một lần duy nhất trong thời gian khóa học như sau:\n1. Nếu nộp trước ngày tổ chức kiểm tra và xếp lớp Anh văn đầu khóa học ít nhất 03 ngày làm việc, SV được xét dự kiểm tra và được công nhận đạt chuẩn ngoại ngữ đầu ra khi tốt nghiệp tại Điều 7 quy định này.\n2. Nếu nộp trước hai tuần lễ kể từ ngày bắt đầu học kỳ: SV được xét miễn học các học phần Anh văn còn lại theo kế hoạch và được công nhận đạt chuẩn ngoại ngữ đầu ra khi tốt nghiệp tại Điều 7 quy định này.\n3. Nếu nộp trước hai tuần lễ kể từ ngày bắt đầu học kỳ thứ 7 tính theo khóa tuyển của SV: SV được đăng ký học các học phần chuyên ngành tại Điều 6 và được công nhận đạt chuẩn ngoại ngữ đầu ra khi tốt nghiệp tại Điều 7 quy định này.\n4. Nếu nộp trước khi nộp hồ sơ xét tốt nghiệp: SV được xét công nhận đạt chuẩn ngoại ngữ đầu ra khi tốt nghiệp tại Điều 7 quy định này.",
+      "chuong_trinh_ap_dung": [
+        "đại trà"
+      ]
+    },
+    {
+      "chunk_id": "2464_quydinh_d10_k1",
+      "van_ban_id": "2464_quydinh",
+      "chuong": null,
+      "dieu": "10",
+      "ten_dieu": "Thời gian và thủ tục xét đạt chuẩn ngoại ngữ trong quá trình học và đạt chuẩn đầu ra đối với chương trình cử nhân tài năng",
+      "khoan": "1",
+      "trang_start": 7,
+      "trang_end": 8,
+      "chu_de": "cử nhân tài năng nộp chứng chỉ bậc 3/6: thời hạn nộp; miễn thi; miễn học Anh văn; học kỳ thứ 7",
+      "text": "1. Trường hợp sinh viên nộp chứng chỉ ngoại ngữ bậc 3/6 được quy định tại Điều 7 quy định này, thời gian và thủ tục xét đạt chuẩn ngoại ngữ trong quá trình học tại Điều 6 như sau:\na) Nếu nộp chứng chỉ trước ngày tổ chức kiểm tra và xếp lớp Anh văn đầu khóa học ít nhất 03 ngày làm việc, SV được xét miễn thi và được đăng ký học các học phần chuyên ngành tại Điều 6 quy định này.\nb) Nếu nộp chứng chỉ trước hai tuần lễ kể từ ngày bắt đầu học kỳ: SV được xét miễn học các học phần Anh văn còn lại theo kế hoạch và được đăng ký học các học phần chuyên ngành tại Điều 6 quy định này.\nc) Nếu nộp chứng chỉ trước hai (02) tuần lễ kể từ ngày bắt đầu học kỳ thứ 7 tính theo khóa tuyển của SV: SV được đăng ký học các học phần chuyên ngành tại Điều 6 quy định này.",
+      "chuong_trinh_ap_dung": [
+        "cử nhân tài năng"
+      ]
+    },
+    {
+      "chunk_id": "2464_quydinh_d10_k2",
+      "van_ban_id": "2464_quydinh",
+      "chuong": null,
+      "dieu": "10",
+      "ten_dieu": "Thời gian và thủ tục xét đạt chuẩn ngoại ngữ trong quá trình học và đạt chuẩn đầu ra đối với chương trình cử nhân tài năng",
+      "khoan": "2",
+      "trang_start": 8,
+      "trang_end": 8,
+      "chu_de": "cử nhân tài năng khóa 2022 trở về trước nộp chứng chỉ bậc 3/6 được xét đạt chuẩn đầu ra",
+      "text": "2. Đối với sinh viên khóa tuyển 2022 trở về trước: Nếu sinh viên nộp chứng chỉ ngoại ngữ bậc 3/6 được quy định tại Điều 7 quy định này, SV được xét đạt chuẩn đầu ra ngoại ngữ khi tốt nghiệp đối với chương trình cử nhân tài năng sau khi nộp chứng chỉ.",
+      "chuong_trinh_ap_dung": [
+        "cử nhân tài năng"
+      ],
+      "khoa_tuyen_tu": null,
+      "khoa_tuyen_den": 2022
+    },
+    {
+      "chunk_id": "2464_quydinh_d10_k3",
+      "van_ban_id": "2464_quydinh",
+      "chuong": null,
+      "dieu": "10",
+      "ten_dieu": "Thời gian và thủ tục xét đạt chuẩn ngoại ngữ trong quá trình học và đạt chuẩn đầu ra đối với chương trình cử nhân tài năng",
+      "khoan": "3",
+      "trang_start": 8,
+      "trang_end": 8,
+      "chu_de": "cử nhân tài năng khóa 2023 trở về sau nộp chứng chỉ bậc 4/6 được xét đạt chuẩn đầu ra",
+      "text": "3. Đối với sinh viên khóa tuyển 2023 trở về sau:  Nếu sinh viên nộp chứng chỉ ngoại ngữ bậc 4/6 được quy định tại Điều 8 quy định này, SV được xét đạt chuẩn đầu ra ngoại ngữ khi tốt nghiệp đối với chương trình cử nhân tài năng sau khi nộp chứng chỉ.",
+      "chuong_trinh_ap_dung": [
+        "cử nhân tài năng"
+      ],
+      "khoa_tuyen_tu": 2023,
+      "khoa_tuyen_den": null
+    },
+    {
+      "chunk_id": "2464_quydinh_d11_k1",
+      "van_ban_id": "2464_quydinh",
+      "chuong": null,
+      "dieu": "11",
+      "ten_dieu": "Hiệu lực của chứng chỉ ngoại ngữ",
+      "khoan": "1",
+      "trang_start": 8,
+      "trang_end": 8,
+      "chu_de": "hiệu lực chứng chỉ có ghi thời hạn",
+      "text": "1. Đối với chứng chỉ có ghi hiệu lực thời gian: Trường sẽ căn cứ vào hiệu lực này so với thời điểm sinh viên nộp hồ sơ xét đạt chuẩn ngoại ngữ đầu ra cho Trường."
+    },
+    {
+      "chunk_id": "2464_quydinh_d11_k2",
+      "van_ban_id": "2464_quydinh",
+      "chuong": null,
+      "dieu": "11",
+      "ten_dieu": "Hiệu lực của chứng chỉ ngoại ngữ",
+      "khoan": "2",
+      "trang_start": 8,
+      "trang_end": 8,
+      "chu_de": "chứng chỉ không ghi thời hạn có hiệu lực 02 năm kể từ ngày cấp",
+      "text": "2. Đối với chứng chỉ không ghi hiệu lực thời gian: Hiệu lực của chứng chỉ ngoại ngữ là 02 (hai) năm tính từ ngày cấp (được tính ngay sau khi công bố kết quả thi chứng chỉ của sinh viên) đến ngày đăng ký xét đạt chuẩn ngoại ngữ đầu ra cho Trường."
+    },
+    {
+      "chunk_id": "2464_quydinh_d12",
+      "van_ban_id": "2464_quydinh",
+      "chuong": null,
+      "dieu": "12",
+      "ten_dieu": "Hồ sơ xét đạt chuẩn ngoại ngữ đầu ra",
+      "khoan": null,
+      "trang_start": 8,
+      "trang_end": 8,
+      "chu_de": "hồ sơ nộp chứng chỉ: đơn đăng ký, bản photo công chứng, căn cước công dân",
+      "text": "Hồ sơ xét đạt chuẩn ngoại ngữ đầu ra gồm:\n1. Đơn đăng ký xét đạt chuẩn đầu ra ngoại ngữ.\n2. Bản photo có công chứng các chứng chỉ (hoặc bản photo chứng chỉ kèm bản chính đối chiếu).\n3. Mang theo Căn cước công dân để đối chiếu."
+    },
+    {
+      "chunk_id": "2464_quydinh_d13_k1",
+      "van_ban_id": "2464_quydinh",
+      "chuong": null,
+      "dieu": "13",
+      "ten_dieu": "Xác minh chứng chỉ ngoại ngữ và xử lý đối với các trường hợp nộp chứng chỉ giả",
+      "khoan": "1",
+      "trang_start": 8,
+      "trang_end": 8,
+      "chu_de": "xác minh chứng chỉ ngoại ngữ với đơn vị cấp",
+      "text": "1. Xác minh chứng chỉ ngoại ngữ: Trường sẽ gửi đến các đơn vị cấp chứng chỉ để xác minh sau khi nhận chứng chỉ ngoại ngữ của sinh viên."
+    },
+    {
+      "chunk_id": "2464_quydinh_d13_k2",
+      "van_ban_id": "2464_quydinh",
+      "chuong": null,
+      "dieu": "13",
+      "ten_dieu": "Xác minh chứng chỉ ngoại ngữ và xử lý đối với các trường hợp nộp chứng chỉ giả",
+      "khoan": "2",
+      "trang_start": 8,
+      "trang_end": 8,
+      "chu_de": "nộp chứng chỉ giả bị buộc thôi học; thu hồi văn bằng",
+      "text": "2. Xử lý đối với các trường hợp nộp chứng chỉ giả: Nếu SV nộp chứng chỉ giả, Trường sẽ xử lý buộc thôi học; văn bằng tốt nghiệp nếu đã được cấp sẽ bị thu hồi, hủy bỏ theo quy định."
+    },
+    {
+      "chunk_id": "2464_quydinh_d14",
+      "van_ban_id": "2464_quydinh",
+      "chuong": null,
+      "dieu": "14",
+      "ten_dieu": "Điều khoản thi hành",
+      "khoan": null,
+      "trang_start": 9,
+      "trang_end": 9,
+      "chu_de": "điều khoản thi hành; Hiệu trưởng sửa đổi bổ sung khi có văn bản mới của ĐHQG-HCM hoặc Bộ GD&ĐT",
+      "text": "Trong quá trình thực hiện, Hiệu trưởng sẽ xem xét và quyết định sửa đổi, bổ sung các quy định nếu có văn bản quy định mới từ Đại học Quốc gia Thành phố Hồ Chí Minh hoặc Bộ Giáo dục và Đào tạo."
     },
     {
       "chunk_id": "stsv2025_ke_hoach_nam_hoc_p000",

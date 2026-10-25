@@ -42,6 +42,12 @@ ALIAS_CHUONG_TRINH = {
     "clc": "tăng cường tiếng Anh",
     "tien tien": "tiên tiến",
     "cttt": "tiên tiến",
+    "dai tra": "đại trà",
+    "chuong trinh chuan": "đại trà",
+    "cu nhan tai nang": "cử nhân tài năng",
+    "tai nang": "cử nhân tài năng",
+    "cntn": "cử nhân tài năng",
+    
 }
 
 STOPWORDS = {
@@ -155,6 +161,57 @@ def nhan_dien(q: str, bang_alias: dict[str, str]) -> tuple[set[str], str]:
     return tim_thay, q
 
 
+# "khoa tuyen 2023", "khoa 2023", "k2023", "k23" (23 -> 2023)
+_RE_KHOA = re.compile(r"\b(?:khoa tuyen|khoa|k)\s*(20\d{2}|[12]\d)\b")
+
+
+def nhan_dien_khoa(q: str) -> tuple[int | None, str]:
+    m = _RE_KHOA.search(q)
+    if not m:
+        return None, q
+    n = int(m.group(1))
+    return (n if n >= 2000 else 2000 + n), _RE_KHOA.sub(" ", q)
+
+
+def _thua_huong(chunk: dict, vb: dict, key: str):
+    """Chunk ghi đè giá trị của văn bản nếu có khóa đó (kể cả giá trị null)."""
+    return chunk[key] if key in chunk else vb.get(key)
+
+
+def _quy_tac(chunk: dict, vb: dict) -> list[tuple[set[str], int | None, int | None]]:
+    """Danh sách (tập chương trình, khóa từ, khóa đến) mà chunk áp dụng.
+
+    Tập chương trình rỗng = áp dụng mọi chương trình. Ưu tiên 'pham_vi' của chunk.
+    """
+    mac_tu, mac_den = vb.get("khoa_tuyen_tu"), vb.get("khoa_tuyen_den")
+    if chunk.get("pham_vi"):
+        return [
+            (set(r["chuong_trinh"]), r.get("khoa_tuyen_tu", mac_tu), r.get("khoa_tuyen_den", mac_den))
+            for r in chunk["pham_vi"]
+        ]
+    ct = _thua_huong(chunk, vb, "chuong_trinh_ap_dung") or [vb.get("chuong_trinh", "")]
+    return [({x for x in ct if x}, _thua_huong(chunk, vb, "khoa_tuyen_tu"), _thua_huong(chunk, vb, "khoa_tuyen_den"))]
+
+
+def _nhan_khoa(quy_tac) -> str:
+    cac = []
+    for ct, tu, den in quy_tac:
+        kh = " ".join(x for x in (f"từ {tu}" if tu else "", f"đến {den}" if den else "") if x)
+        cac.append(f"{'/'.join(sorted(ct)) or 'mọi chương trình'}: {kh or 'mọi khóa'}")
+    return "; ".join(cac)
+
+
+def khop_pham_vi(d: dict, chuong_trinh: set[str], khoa: int | None) -> bool:
+    """Chunk khớp nếu ÍT NHẤT MỘT quy tắc khớp đồng thời chương trình và khóa."""
+    for ct, tu, den in d["quy_tac"]:
+        if chuong_trinh and ct and not (ct & chuong_trinh):
+            continue
+        if khoa is not None and ((tu is not None and khoa < tu) or (den is not None and khoa > den)):
+            continue
+        return True
+    return False
+
+
 def trich_dan(chunk: dict, vb: dict) -> str:
     s = f"{vb['loai']} {vb['so_hieu']}".strip() if vb["so_hieu"] else vb["ten_van_ban"]
     if chunk.get("dieu"):
@@ -178,19 +235,24 @@ class KeywordRetriever:
             vb = van_ban[c["van_ban_id"]]
             if vb.get("het_hieu_luc"):
                 continue
+            quy_tac = _quy_tac(c, vb)
+            ct_ap_dung = sorted(set().union(*[r[0] for r in quy_tac]))
             head = " ".join(
                 [
                     c["ten_dieu"],
                     c["chu_de"],
                     vb["ten_van_ban"],
                     vb["chuong_trinh"],
+                    " ".join(ct_ap_dung),
                     " ".join(vb.get("chuong_trinh_alias", [])),
+                    " ".join((c.get("chung_chi_toi_thieu") or {}).keys()),  # IELTS, TOEIC... nằm trong tiêu đề chunk
                 ]
             )
             self.docs.append(
                 {
                     "chunk": c,
                     "vb": vb,
+                    "quy_tac": quy_tac,
                     "tf": Counter(tach_tu(c["text"])),  # tần suất từ trong nội dung
                     "head": set(
                         tach_tu(head)
@@ -218,11 +280,8 @@ class KeywordRetriever:
         min_coverage: float = 0.35,
     ) -> dict:
         q = bo_dau(query)
-        # "khóa 2023": lấy ra để cảnh báo, không đưa vào từ khóa tìm kiếm
-        m_khoa = re.search(r"\bkhoa\s+(20\d\d)\b", q)
-        khoa = int(m_khoa.group(1)) if m_khoa else None
-        if m_khoa:
-            q = q.replace(m_khoa.group(0), " ")
+        # "khóa 2023" / "K2023" / "K23": lọc theo khóa tuyển, không đưa vào từ khóa tìm kiếm
+        khoa, q = nhan_dien_khoa(q)
         nganh, q = nhan_dien(q, ALIAS_NGANH)
         chuong_trinh, q = nhan_dien(q, ALIAS_CHUONG_TRINH)
         day_tu = re.findall(r"[a-z0-9]+", q)
@@ -264,90 +323,111 @@ class KeywordRetriever:
                 or not d["vb"]["nganh"]
                 or any(n in d["vb"]["nganh"] for n in nganh)
             )
-            and (
-                not chuong_trinh
-                or not d["vb"].get("chuong_trinh")
-                or d["vb"]["chuong_trinh"] in chuong_trinh
-            )
+            and khop_pham_vi(d, chuong_trinh, None)  # lọc chương trình; khóa lọc ở bước sau
         ]
+        # khóa tuyển: lọc nghiêm; nếu không còn kết quả thì nới lỏng khóa và cảnh báo
+        ung_vien_khoa = [d for d in ung_vien if khop_pham_vi(d, chuong_trinh, khoa)] if khoa else ung_vien
 
-        ket_qua = []
-        for d in ung_vien:
-            diem = 0.0
-            khop = 0.0
-            for t in tokens:
-                if t not in self.idf:
-                    continue
-                trong_so = (
-                    w_tok[t] * self.idf[t] ** 2
-                )  # bình phương: từ hiếm (ielts, toeic...) áp đảo từ chung
-                tf = d["tf"].get(t, 0)
-                if tf or t in d["head"]:
-                    khop += trong_so
-                if tf:
-                    diem += trong_so * (1 + math.log(tf))
-                if t in d["head"]:
-                    diem += trong_so * 1.5
-            for (
-                cum,
-                idf_cum,
-            ) in (
-                cum_hiem
-            ):  # thưởng khi cả cụm xuất hiện liền nhau, theo độ hiếm của CỤM
-                if cum in d["norm"]:
-                    diem += idf_cum**2
-            # độ phủ: phần trọng số của câu hỏi mà chunk này khớp được (câu ngoài phạm vi thường < 0.35)
-            if diem > 0 and (tong_w == 0 or khop / tong_w >= min_coverage):
-                ket_qua.append((diem, d))
+        def cham_diem(ds_ung_vien):
+            ket_qua = []
+            for d in ds_ung_vien:
+                diem = 0.0
+                khop = 0.0
+                for t in tokens:
+                    if t not in self.idf:
+                        continue
+                    trong_so = (
+                        w_tok[t] * self.idf[t] ** 2
+                    )  # bình phương: từ hiếm (ielts, toeic...) áp đảo từ chung
+                    tf = d["tf"].get(t, 0)
+                    if tf or t in d["head"]:
+                        khop += trong_so
+                    if tf:
+                        diem += trong_so * (1 + math.log(tf))
+                    if t in d["head"]:
+                        diem += trong_so * 1.5
+                for (
+                    cum,
+                    idf_cum,
+                ) in (
+                    cum_hiem
+                ):  # thưởng khi cả cụm xuất hiện liền nhau, theo độ hiếm của CỤM
+                    if cum in d["norm"]:
+                        diem += idf_cum**2
+                # độ phủ: phần trọng số của câu hỏi mà chunk này khớp được (câu ngoài phạm vi thường < 0.35)
+                if diem > 0 and (tong_w == 0 or khop / tong_w >= min_coverage):
+                    ket_qua.append((diem, d))
 
-        def loc(
-            ds,
-        ):  # sắp xếp + bỏ điểm quá thấp (tuyệt đối min_score, hoặc so với kết quả đầu min_ratio)
-            ds = sorted(ds, key=lambda x: x[0], reverse=True)
-            if not ds:
-                return ds
-            nguong = max(min_score, min_ratio * ds[0][0])
-            return [x for x in ds if x[0] >= nguong]
+            def loc(
+                ds,
+            ):  # sắp xếp + bỏ điểm quá thấp (tuyệt đối min_score, hoặc so với kết quả đầu min_ratio)
+                ds = sorted(ds, key=lambda x: x[0], reverse=True)
+                if not ds:
+                    return ds
+                nguong = max(min_score, min_ratio * ds[0][0])
+                return [x for x in ds if x[0] >= nguong]
 
-        if (
-            nganh or chuong_trinh
-        ):  # người dùng nêu ngành/chương trình: ưu tiên nhẹ văn bản riêng của ngành
-            ket_qua = [
-                (diem * 1.5 if d["vb"]["nganh"] else diem, d) for diem, d in ket_qua
-            ]
-        ket_qua = loc(ket_qua)[:top_k]
+            if (
+                nganh or chuong_trinh
+            ):  # người dùng nêu ngành/chương trình: ưu tiên nhẹ văn bản riêng của ngành
+                ket_qua = [
+                    (diem * 1.5 if d["vb"]["nganh"] else diem, d) for diem, d in ket_qua
+                ]
+            return loc(ket_qua)
 
-        # khong nêu ngành và kết quả dấn đến nhiều chuẩn khác nhau thì nên hỏi lại
+        ket_qua = cham_diem(ung_vien_khoa)
+        ngoai_khoa = False
+        if khoa and not ket_qua:
+            ket_qua = cham_diem(ung_vien)
+            ngoai_khoa = bool(ket_qua)
+
+        # Hỏi lại khi các chunk liên quan nhất có MỨC ĐIỂM KHÁC NHAU giữa các nhóm chuẩn
+        # (nhom_chuan) mà người dùng chưa nêu đủ để chọn một nhóm. Xét trên mọi chunk gần
+        # điểm đầu (không chỉ top_k) và trả chunk tốt nhất của từng nhóm.
+        gan_dau = [x for x in ket_qua if x[0] >= 0.6 * ket_qua[0][0]] if ket_qua else []
         nhom = {
             d["vb"].get("nhom_chuan")
-            for _, d in ket_qua
+            for _, d in gan_dau
             if d["chunk"].get("chung_chi_toi_thieu")
-        } - {
-            None
-        }  # chỉ hỏi lại khi các mức điểm khác nhau
-        can_hoi_lai = not nganh and len(nhom) > 1
+        } - {None}
+        can_hoi_lai = len(nhom) > 1
+        if can_hoi_lai:
+            moi_nhom, da_co = [], set()
+            for x in gan_dau:
+                n = x[1]["vb"].get("nhom_chuan")
+                if x[1]["chunk"].get("chung_chi_toi_thieu") and n not in da_co:
+                    da_co.add(n)
+                    moi_nhom.append(x)
+            ket_qua = (moi_nhom + [x for x in ket_qua if x not in moi_nhom])[: max(top_k, len(moi_nhom))]
+        else:
+            ket_qua = ket_qua[:top_k]
+
+        # Đáp án phụ thuộc khóa tuyển (chunk có giới hạn khóa/pham_vi riêng) mà câu hỏi chưa nêu khóa
+        can_hoi_khoa = khoa is None and any(
+            ("pham_vi" in d["chunk"] or "khoa_tuyen_tu" in d["chunk"] or "khoa_tuyen_den" in d["chunk"])
+            for _, d in ket_qua
+        )
 
         canh_bao = None
-        if khoa:
-            for _, d in ket_qua:
-                m = re.search(r"\b(20\d\d)\b", str(d["vb"].get("khoa_tuyen", "")))
-                if m and khoa < int(m.group(1)):
-                    canh_bao = (
-                        f"{d['vb']['loai']} {d['vb']['so_hieu']} chỉ áp dụng cho khóa tuyển {m.group(1)} "
-                        f"trở đi, chưa có dữ liệu cho khóa {khoa}. Hãy hỏi Phòng Đào tạo."
-                    )
-                    break
+        if ngoai_khoa and ket_qua:
+            canh_bao = (
+                f"Chưa có quy định áp dụng cho khóa {khoa} trong dữ liệu (các văn bản tìm được "
+                f"áp dụng cho khóa khác). Hãy hỏi Phòng Đào tạo."
+            )
 
         return {
             "canh_bao": canh_bao,
             "nganh": sorted(nganh),
             "chuong_trinh": sorted(chuong_trinh),
             "can_hoi_lai": can_hoi_lai,
+            "can_hoi_khoa": can_hoi_khoa,
+            "khoa_tuyen": khoa,
             "ket_qua": [
                 {
                     "diem": round(diem, 2),
                     "chunk_id": d["chunk"]["chunk_id"],
                     "nhom_chuan": d["vb"].get("nhom_chuan"),
+                    "pham_vi": _nhan_khoa(d["quy_tac"]),
                     "trich_dan": trich_dan(d["chunk"], d["vb"]),
                     "text": d["chunk"]["text"],
                     "chung_chi_toi_thieu": d["chunk"].get("chung_chi_toi_thieu"),
@@ -374,23 +454,26 @@ def main() -> None:
     def hoi(q: str) -> None:
         out = r.search(q, top_k=args.top)
         print(f"\n? {q}")
-        print(f"   ngành={out['nganh']} chương trình={out['chuong_trinh']}")
+        print(f"   ngành={out['nganh']} chương trình={out['chuong_trinh']} khóa={out['khoa_tuyen']}")
         if out["canh_bao"]:
             print("   CẢNH BÁO: " + out["canh_bao"])
         if out["can_hoi_lai"]:
             print(
-                "   Lưu ý: chưa biết bạn học ngành nào. Mức điểm khác nhau theo ngành, "
-                "hãy nêu ngành để có đáp án chính xác."
+                "   Lưu ý: mức điểm khác nhau theo chương trình/ngành, "
+                "hãy nêu chương trình (tăng cường, tiên tiến, đại trà, cử nhân tài năng) và ngành để có đáp án chính xác."
             )
+        if out["can_hoi_khoa"]:
+            print("   Lưu ý: quy định khác nhau theo khóa tuyển, hãy nêu khóa (ví dụ: khóa 2023).")
         if not out["ket_qua"]:
             print("   (không tìm thấy chunk phù hợp)")
         tu_khoa = set(tach_tu(q)) - STOPWORDS
         for k in out["ket_qua"]:
             print(f"\n   {k['trich_dan']}   (độ phù hợp {k['diem']})")
+            print(f"    [phạm vi: {k['pham_vi']}]")
             cc = k.get("chung_chi_toi_thieu")
             if cc:
                 chon = {
-                    ten: gt for ten, gt in cc.items() if tu_khoa & set(tach_tu(ten))
+                    ten: gt for ten, gt in cc.items() if tach_tu(ten)[0] in tu_khoa
                 }
                 for ten, gt in (chon or cc).items():
                     print(f"    - {ten}: {gt}")
