@@ -57,7 +57,9 @@ def test_route_scheduling():
 
 
 def test_route_regulation_rag():
-    query = "Chuẩn đầu ra ngoại ngữ TOEIC của ngành Công nghệ thông tin là bao nhiêu điểm?"
+    query = (
+        "Chuẩn đầu ra ngoại ngữ TOEIC của ngành Công nghệ thông tin là bao nhiêu điểm?"
+    )
     res = route_query(query)
     assert res["intent"] == INTENT_REGULATION_RAG
     assert res["target_engine"] == "rag_retriever"
@@ -74,3 +76,20 @@ def test_route_ambiguous_short_query():
     query = "Cứu em với"
     res = route_query(query)
     assert res["intent"] == INTENT_CLARIFY
+
+
+def test_route_calc_gpa_with_extracted_grades():
+    query = "Tính điểm GPA học kỳ này giúp mình với Giải tích 1(8.0, 4TC) và C++ (7.5, 3 tín)"
+    res = route_query(query)
+
+    assert res["intent"] == INTENT_CALC_GPA
+    grades = res["extracted_params"]["grades"]
+    assert len(grades) == 2
+
+    assert grades[0]["subject"] == "Giải tích 1"
+    assert grades[0]["grade"] == 8.0
+    assert grades[0]["credits"] == 4
+
+    assert grades[1]["subject"] == "C++"
+    assert grades[1]["grade"] == 7.5
+    assert grades[1]["credits"] == 3

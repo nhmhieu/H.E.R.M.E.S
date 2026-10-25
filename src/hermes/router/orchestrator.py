@@ -13,7 +13,6 @@ Routes user queries to appropriate specialized engines:
 import re
 from typing import Any, Dict
 
-
 # Constants for Intents
 INTENT_CALC_GPA = "CALC_GPA"
 INTENT_SCHEDULING = "SCHEDULING"
@@ -38,32 +37,91 @@ REJECT_PATTERNS = [
 
 # Keyword dictionaries with weights
 GPA_KEYWORDS = [
-    "gpa", "điểm", "tính điểm", "tính gpa", "cảnh báo học vụ", "buộc thôi học",
-    "học vụ", "tín chỉ tích lũy", "thang điểm 10", "thang điểm 4", "quy đổi điểm",
-    "điểm rèn luyện", "học bổng", "xếp loại", "học kỳ", "what-if", "dự báo điểm"
+    "gpa",
+    "điểm",
+    "tính điểm",
+    "tính gpa",
+    "cảnh báo học vụ",
+    "buộc thôi học",
+    "học vụ",
+    "tín chỉ tích lũy",
+    "thang điểm 10",
+    "thang điểm 4",
+    "quy đổi điểm",
+    "điểm rèn luyện",
+    "học bổng",
+    "xếp loại",
+    "học kỳ",
+    "what-if",
+    "dự báo điểm",
 ]
 
 SCHEDULING_KEYWORDS = [
-    "lịch", "lịch thi", "xếp lịch", "lập lịch", "thời gian biểu", "ôn thi",
-    "kế hoạch học", "thời khóa biểu", "phân bổ giờ", "giờ rảnh", "schedule",
-    "study plan", "ngày thi", "học bài"
+    "lịch",
+    "lịch thi",
+    "xếp lịch",
+    "lập lịch",
+    "thời gian biểu",
+    "ôn thi",
+    "kế hoạch học",
+    "thời khóa biểu",
+    "phân bổ giờ",
+    "giờ rảnh",
+    "schedule",
+    "study plan",
+    "ngày thi",
+    "học bài",
 ]
 
 REGULATION_KEYWORDS = [
-    "quy chế", "sổ tay", "điều khoản", "chuẩn đầu ra", "tiếng anh", "toeic",
-    "ielts", "vstep", "học lại", "học cải thiện", "rút học phần", "rút môn",
-    "đăng ký học phần", "chuyển ngành", "bảo lưu", "tốt nghiệp", "điều kiện tốt nghiệp",
-    "miễn giảm", "chứng chỉ", "phòng đào tạo"
+    "quy chế",
+    "sổ tay",
+    "điều khoản",
+    "chuẩn đầu ra",
+    "tiếng anh",
+    "toeic",
+    "ielts",
+    "vstep",
+    "học lại",
+    "học cải thiện",
+    "rút học phần",
+    "rút môn",
+    "đăng ký học phần",
+    "chuyển ngành",
+    "bảo lưu",
+    "tốt nghiệp",
+    "điều kiện tốt nghiệp",
+    "miễn giảm",
+    "chứng chỉ",
+    "phòng đào tạo",
 ]
 
 DEADLINE_KEYWORDS = [
-    "deadline", "hạn nộp", "thông báo:", "bài tập lab", "nộp bài",
-    ".ics", "ical", "moodle", "hạn chót", "thầy gửi", "cô gửi"
+    "deadline",
+    "hạn nộp",
+    "thông báo:",
+    "bài tập lab",
+    "nộp bài",
+    ".ics",
+    "ical",
+    "moodle",
+    "hạn chót",
+    "thầy gửi",
+    "cô gửi",
 ]
 
 CLARIFY_TRIGGERS = [
-    "cứu em", "cứu mình", "giúp em", "giúp mình", "alo", "ad ơi",
-    "admin ơi", "chào bạn", "hello", "hi", "ơi"
+    "cứu em",
+    "cứu mình",
+    "giúp em",
+    "giúp mình",
+    "alo",
+    "ad ơi",
+    "admin ơi",
+    "chào bạn",
+    "hello",
+    "hi",
+    "ơi",
 ]
 
 
@@ -85,7 +143,7 @@ def _score_keywords(text_lower: str, keywords: list[str]) -> int:
 def route_query(query: str) -> Dict[str, Any]:
     """
     Route an incoming query to the appropriate engine.
-    
+
     Returns a dictionary conforming to the Router Contract:
     {
         "intent": str,
@@ -101,7 +159,7 @@ def route_query(query: str) -> Dict[str, Any]:
             "confidence": 1.0,
             "target_engine": "clarifier",
             "extracted_params": {},
-            "message": "Vui lòng nhập câu hỏi hoặc yêu cầu cần trợ giúp."
+            "message": "Vui lòng nhập câu hỏi hoặc yêu cầu cần trợ giúp.",
         }
 
     clean_query = query.strip()
@@ -114,7 +172,10 @@ def route_query(query: str) -> Dict[str, Any]:
             "confidence": 0.99,
             "target_engine": "guardrails",
             "extracted_params": {"reason": "Policy violation or Non-goal"},
-            "message": "Yêu cầu vi phạm quy định an toàn hoặc nằm ngoài phạm vi hỗ trợ (Hệ thống không giải bài tập hộ sinh viên)."
+            "message": (
+                "Yêu cầu vi phạm quy định an toàn hoặc nằm ngoài phạm vi hỗ trợ "
+                "(Hệ thống không giải bài tập hộ sinh viên)."
+            ),
         }
 
     # 2. Check for Ambiguous / Clarification queries
@@ -127,7 +188,10 @@ def route_query(query: str) -> Dict[str, Any]:
                     "confidence": 0.90,
                     "target_engine": "clarifier",
                     "extracted_params": {},
-                    "message": "Chào bạn! Bạn cần H.E.R.M.E.S hỗ trợ về tính điểm GPA, lập lịch ôn thi hay tra cứu quy chế học vụ?"
+                    "message": (
+                        "Chào bạn! Bạn cần H.E.R.M.E.S hỗ trợ về tính điểm GPA, "
+                        "lập lịch ôn thi hay tra cứu quy chế học vụ?"
+                    ),
                 }
 
     # 3. Score categories (Fast-Path)
@@ -144,7 +208,7 @@ def route_query(query: str) -> Dict[str, Any]:
             "confidence": 0.90,
             "target_engine": "ai_extractor",
             "extracted_params": {"raw_text": clean_query},
-            "message": "Trích xuất deadline và thông tin bài tập."
+            "message": "Trích xuất deadline và thông tin bài tập.",
         }
 
     # If scores are all 0
@@ -155,7 +219,7 @@ def route_query(query: str) -> Dict[str, Any]:
             "confidence": 0.50,
             "target_engine": "clarifier",
             "extracted_params": {},
-            "message": "Câu hỏi chưa rõ ràng. Bạn có thể nói rõ hơn về vấn đề học vụ hoặc lịch học cần giúp đỡ không?"
+            "message": "Câu hỏi chưa rõ ràng. Bạn có thể nói rõ hơn về vấn đề học vụ hoặc lịch học cần giúp đỡ không?",
         }
 
     # Scheduling intent
@@ -165,17 +229,21 @@ def route_query(query: str) -> Dict[str, Any]:
             "confidence": min(0.60 + sched_score * 0.15, 0.98),
             "target_engine": "scheduler_engine",
             "extracted_params": {},
-            "message": "Định tuyến tới bộ lập lịch ôn tập."
+            "message": "Định tuyến tới bộ lập lịch ôn tập.",
         }
 
     # GPA Calculation intent
     if gpa_score >= sched_score and gpa_score >= reg_score:
+        extracted_grades = extract_grades_from_text(clean_query)
         return {
             "intent": INTENT_CALC_GPA,
             "confidence": min(0.60 + gpa_score * 0.15, 0.98),
             "target_engine": "academic_engine",
-            "extracted_params": {},
-            "message": "Định tuyến tới bộ tính toán học vụ và GPA."
+            "extracted_params": {
+                "grades": extracted_grades,
+                "raw_text": clean_query,
+            },
+            "message": "Định tuyến tới bộ tính toán học vụ và GPA.",
         }
 
     # Regulation / RAG intent
@@ -183,6 +251,30 @@ def route_query(query: str) -> Dict[str, Any]:
         "intent": INTENT_REGULATION_RAG,
         "confidence": min(0.60 + reg_score * 0.15, 0.98),
         "target_engine": "rag_retriever",
-        "extracted_params": {},
-        "message": "Định tuyến tới bộ tra cứu quy chế và sổ tay sinh viên."
+        "extracted_params": {"query": clean_query},
+        "message": "Định tuyến tới bộ tra cứu quy chế và sổ tay sinh viên.",
     }
+
+
+def extract_grades_from_text(text: str) -> list[dict]:
+    results = []
+    pattern = r"([A-Za-zÀ-ỹ0-9\s\+\#\.\-]+)\s*\(\s*(\d+(?:\.\d+)?)\s*,\s*(\d+)\s*(?:tc|tín)?\s*\)"
+
+    for match in re.finditer(pattern, text, re.IGNORECASE):
+        raw_subject = match.group(1).strip()
+        cleaned_parts = re.split(
+            r"[,;\n]|(?:\b(?:và|với|môn|gồm|học\s+kỳ\s+này|học\s+phần|cho|là)\b)",
+            raw_subject,
+            flags=re.IGNORECASE,
+        )
+        subject_name = cleaned_parts[-1].strip() if cleaned_parts else raw_subject
+        grade_val = float(match.group(2))
+        credits_val = int(match.group(3))
+        results.append(
+            {
+                "subject": subject_name,
+                "grade": grade_val,
+                "credits": credits_val,
+            }
+        )
+    return results

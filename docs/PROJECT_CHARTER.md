@@ -12,7 +12,7 @@
 
 ### 1.2 Pain Points (Nỗi đau thực tế của sinh viên)
 1. **Quy chế tản mát và khó hiểu:** Quy chế đào tạo tín chỉ, quy định cảnh báo học vụ, chuẩn đầu ra ngoại ngữ nằm rải rác trong nhiều văn bản PDF dài hàng trăm trang. Sinh viên thường hiểu sai hoặc không nắm rõ cách tính điểm, dẫn đến nguy cơ bị cảnh báo học vụ mà không hay biết.
-2. **Khủng hoảng quản lý thời gian & Deadline:** Sinh viên năm 1-2 thường bị dồn 5-7 môn thi/đồ án trong vòng 2 tuần thi cuối kỳ nhưng thiếu kỹ năng lập kế hoạch ôn tập khoa học, dẫn đến tình trạng "học dồn" gây áp lực tâm lý.
+2. **Khủng hoảng quản lý thời gian & Deadline:** Sinh viên năm 1-2 thường bị dồn môn thi/đồ án trong vòng 2 tuần thi cuối kỳ nhưng thiếu kỹ năng lập kế hoạch ôn tập khoa học, dẫn đến tình trạng "học dồn" gây áp lực tâm lý.
 3. **Ảo giác của các mô hình LLM phổ thông (Hallucination):** Khi hỏi ChatGPT hay các LLM chung chung về quy chế trường HCMUS, AI thường tự bịa đặt thang điểm hoặc đưa ra quy định của các trường đại học khác (do thiếu dữ liệu chuyên biệt).
 
 ---
