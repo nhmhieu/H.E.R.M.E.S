@@ -47,7 +47,6 @@ ALIAS_CHUONG_TRINH = {
     "cu nhan tai nang": "cử nhân tài năng",
     "tai nang": "cử nhân tài năng",
     "cntn": "cử nhân tài năng",
-    
 }
 
 STOPWORDS = {
@@ -186,17 +185,29 @@ def _quy_tac(chunk: dict, vb: dict) -> list[tuple[set[str], int | None, int | No
     mac_tu, mac_den = vb.get("khoa_tuyen_tu"), vb.get("khoa_tuyen_den")
     if chunk.get("pham_vi"):
         return [
-            (set(r["chuong_trinh"]), r.get("khoa_tuyen_tu", mac_tu), r.get("khoa_tuyen_den", mac_den))
+            (
+                set(r["chuong_trinh"]),
+                r.get("khoa_tuyen_tu", mac_tu),
+                r.get("khoa_tuyen_den", mac_den),
+            )
             for r in chunk["pham_vi"]
         ]
     ct = _thua_huong(chunk, vb, "chuong_trinh_ap_dung") or [vb.get("chuong_trinh", "")]
-    return [({x for x in ct if x}, _thua_huong(chunk, vb, "khoa_tuyen_tu"), _thua_huong(chunk, vb, "khoa_tuyen_den"))]
+    return [
+        (
+            {x for x in ct if x},
+            _thua_huong(chunk, vb, "khoa_tuyen_tu"),
+            _thua_huong(chunk, vb, "khoa_tuyen_den"),
+        )
+    ]
 
 
 def _nhan_khoa(quy_tac) -> str:
     cac = []
     for ct, tu, den in quy_tac:
-        kh = " ".join(x for x in (f"từ {tu}" if tu else "", f"đến {den}" if den else "") if x)
+        kh = " ".join(
+            x for x in (f"từ {tu}" if tu else "", f"đến {den}" if den else "") if x
+        )
         cac.append(f"{'/'.join(sorted(ct)) or 'mọi chương trình'}: {kh or 'mọi khóa'}")
     return "; ".join(cac)
 
@@ -206,7 +217,9 @@ def khop_pham_vi(d: dict, chuong_trinh: set[str], khoa: int | None) -> bool:
     for ct, tu, den in d["quy_tac"]:
         if chuong_trinh and ct and not (ct & chuong_trinh):
             continue
-        if khoa is not None and ((tu is not None and khoa < tu) or (den is not None and khoa > den)):
+        if khoa is not None and (
+            (tu is not None and khoa < tu) or (den is not None and khoa > den)
+        ):
             continue
         return True
     return False
@@ -245,7 +258,9 @@ class KeywordRetriever:
                     vb["chuong_trinh"],
                     " ".join(ct_ap_dung),
                     " ".join(vb.get("chuong_trinh_alias", [])),
-                    " ".join((c.get("chung_chi_toi_thieu") or {}).keys()),  # IELTS, TOEIC... nằm trong tiêu đề chunk
+                    " ".join(
+                        (c.get("chung_chi_toi_thieu") or {}).keys()
+                    ),  # IELTS, TOEIC... nằm trong tiêu đề chunk
                 ]
             )
             self.docs.append(
@@ -323,10 +338,16 @@ class KeywordRetriever:
                 or not d["vb"]["nganh"]
                 or any(n in d["vb"]["nganh"] for n in nganh)
             )
-            and khop_pham_vi(d, chuong_trinh, None)  # lọc chương trình; khóa lọc ở bước sau
+            and khop_pham_vi(
+                d, chuong_trinh, None
+            )  # lọc chương trình; khóa lọc ở bước sau
         ]
         # khóa tuyển: lọc nghiêm; nếu không còn kết quả thì nới lỏng khóa và cảnh báo
-        ung_vien_khoa = [d for d in ung_vien if khop_pham_vi(d, chuong_trinh, khoa)] if khoa else ung_vien
+        ung_vien_khoa = (
+            [d for d in ung_vien if khop_pham_vi(d, chuong_trinh, khoa)]
+            if khoa
+            else ung_vien
+        )
 
         def cham_diem(ds_ung_vien):
             ket_qua = []
@@ -398,13 +419,19 @@ class KeywordRetriever:
                 if x[1]["chunk"].get("chung_chi_toi_thieu") and n not in da_co:
                     da_co.add(n)
                     moi_nhom.append(x)
-            ket_qua = (moi_nhom + [x for x in ket_qua if x not in moi_nhom])[: max(top_k, len(moi_nhom))]
+            ket_qua = (moi_nhom + [x for x in ket_qua if x not in moi_nhom])[
+                : max(top_k, len(moi_nhom))
+            ]
         else:
             ket_qua = ket_qua[:top_k]
 
         # Đáp án phụ thuộc khóa tuyển (chunk có giới hạn khóa/pham_vi riêng) mà câu hỏi chưa nêu khóa
         can_hoi_khoa = khoa is None and any(
-            ("pham_vi" in d["chunk"] or "khoa_tuyen_tu" in d["chunk"] or "khoa_tuyen_den" in d["chunk"])
+            (
+                "pham_vi" in d["chunk"]
+                or "khoa_tuyen_tu" in d["chunk"]
+                or "khoa_tuyen_den" in d["chunk"]
+            )
             for _, d in ket_qua
         )
 
@@ -454,16 +481,21 @@ def main() -> None:
     def hoi(q: str) -> None:
         out = r.search(q, top_k=args.top)
         print(f"\n? {q}")
-        print(f"   ngành={out['nganh']} chương trình={out['chuong_trinh']} khóa={out['khoa_tuyen']}")
+        print(
+            f"   ngành={out['nganh']} chương trình={out['chuong_trinh']} khóa={out['khoa_tuyen']}"
+        )
         if out["canh_bao"]:
             print("   CẢNH BÁO: " + out["canh_bao"])
         if out["can_hoi_lai"]:
             print(
                 "   Lưu ý: mức điểm khác nhau theo chương trình/ngành, "
-                "hãy nêu chương trình (tăng cường, tiên tiến, đại trà, cử nhân tài năng) và ngành để có đáp án chính xác."
+                "hãy nêu chương trình (tăng cường, tiên tiến, đại trà, "
+                "cử nhân tài năng) và ngành để có đáp án chính xác."
             )
         if out["can_hoi_khoa"]:
-            print("   Lưu ý: quy định khác nhau theo khóa tuyển, hãy nêu khóa (ví dụ: khóa 2023).")
+            print(
+                "   Lưu ý: quy định khác nhau theo khóa tuyển, hãy nêu khóa (ví dụ: khóa 2023)."
+            )
         if not out["ket_qua"]:
             print("   (không tìm thấy chunk phù hợp)")
         tu_khoa = set(tach_tu(q)) - STOPWORDS
@@ -472,9 +504,7 @@ def main() -> None:
             print(f"    [phạm vi: {k['pham_vi']}]")
             cc = k.get("chung_chi_toi_thieu")
             if cc:
-                chon = {
-                    ten: gt for ten, gt in cc.items() if tach_tu(ten)[0] in tu_khoa
-                }
+                chon = {ten: gt for ten, gt in cc.items() if tach_tu(ten)[0] in tu_khoa}
                 for ten, gt in (chon or cc).items():
                     print(f"    - {ten}: {gt}")
             else:
