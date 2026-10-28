@@ -278,3 +278,164 @@ def extract_grades_from_text(text: str) -> list[dict]:
             }
         )
     return results
+
+
+_RETRIEVER_INSTANCE = None
+
+
+def _get_retriever():
+    global _RETRIEVER_INSTANCE
+    if _RETRIEVER_INSTANCE is None:
+        from hermes.rag.retriever import KeywordRetriever
+
+        _RETRIEVER_INSTANCE = KeywordRetriever()
+    return _RETRIEVER_INSTANCE
+
+
+def orchestrate(query: str, session_id: str = "default_user") -> Dict[str, Any]:
+    """
+    Master Pipeline điều phối toàn bộ hệ thống H.E.R.M.E.S.
+
+    Quy trình:
+    1. Quét an toàn qua Guardrails (R7)
+    2. Phân loại ý định qua Router 2 tầng (R5)
+    3. Điều hướng xử lý sang GPA Engine (R2) hoặc RAG Quy chế (R3)
+    4. Định dạng và đóng gói kết quả chuẩn trả về cho Giao diện UI/CLI (R6)
+    """
+    from hermes.security.guardrails import validate_and_clean
+    from hermes.engines.academic_calc import (
+        calculate_gpa_10,
+        calculate_gpa_4,
+        convert_score_to_4_and_letter,
+    )
+
+    # 1. Quét an toàn đầu vào (R7)
+    guard_res = validate_and_clean(query)
+    if not guard_res.allowed:
+        return {
+            "status": "blocked",
+            "intent": INTENT_REJECT,
+            "target_engine": "guardrails",
+            "response_text": (
+                f"Yêu cầu bị từ chối: {guard_res.reason} "
+                "(H.E.R.M.E.S không hỗ trợ giải bài tập hoặc xử lý câu lệnh bất thường)."
+            ),
+            "data": {"category": guard_res.category},
+            "provenance": None,
+        }
+
+    clean_query = guard_res.cleaned_text
+
+    # 2. Phân loại ý định qua Router (R5)
+    route_info = route_query(clean_query)
+    intent = route_info["intent"]
+    target_engine = route_info["target_engine"]
+    extracted = route_info.get("extracted_params", {})
+
+    # 3. Điều phối theo Intent
+    # ----------------------------------------------------
+    # Nhánh A: Tính điểm học vụ GPA (R2)
+    # ----------------------------------------------------
+    if intent == INTENT_CALC_GPA:
+        grades = extracted.get("grades", [])
+        if grades:
+            grade_tuples = [(g["grade"], g["credits"]) for g in grades]
+            gpa_10 = calculate_gpa_10(grade_tuples)
+            gpa_4 = calculate_gpa_4(grade_tuples)
+
+            lines = [
+                f"📊 Kết quả tính điểm học vụ ({len(grades)} môn học):",
+                f"  • Điểm trung bình tích lũy hệ 10: {gpa_10:.2f}",
+                f"  • Điểm trung bình tích lũy hệ 4:  {gpa_4:.2f}",
+                "\nChi tiết từng môn:",
+            ]
+            for g in grades:
+                _, letter = convert_score_to_4_and_letter(g["grade"])
+                lines.append(
+                    f"  - {g['subject']}: {g['grade']} ({g['credits']} tín chỉ) -> Điểm chữ: {letter}"
+                )
+
+            return {
+                "status": "success",
+                "intent": intent,
+                "target_engine": target_engine,
+                "response_text": "\n".join(lines),
+                "data": {"gpa_10": gpa_10, "gpa_4": gpa_4, "grades": grades},
+                "provenance": "Quy chế Đào tạo tín chỉ Trường ĐH Khoa học Tự nhiên, ĐHQG-HCM",
+            }
+        else:
+            return {
+                "status": "needs_info",
+                "intent": intent,
+                "target_engine": target_engine,
+                "response_text": (
+                    "Bạn muốn tính điểm GPA hoặc kiểm tra cảnh báo học vụ? "
+                    "Vui lòng cung cấp danh sách điểm theo định dạng: "
+                    "Tên môn (Điểm, Số tín chỉ), ví dụ: Giải tích 1 (8.0, 4TC) và C++ (7.5, 3 tín)."
+                ),
+                "data": extracted,
+                "provenance": None,
+            }
+
+    # ----------------------------------------------------
+    # Nhánh B: Tra cứu quy chế RAG (R3)
+    # ----------------------------------------------------
+    elif intent == INTENT_REGULATION_RAG:
+        retriever = _get_retriever()
+        rag_res = retriever.search(clean_query)
+        hits = rag_res.get("ket_qua", [])
+
+        if hits:
+            top_hit = hits[0]
+            citation = top_hit.get("trich_dan", "Sổ tay sinh viên HCMUS")
+            content = top_hit.get("text", "")
+            display_text = content[:600] + ("..." if len(content) > 600 else "")
+            return {
+                "status": "success",
+                "intent": intent,
+                "target_engine": target_engine,
+                "response_text": f"📖 Theo quy định ({citation}):\n\n{display_text}",
+                "data": {"total_matches": len(hits), "top_hit": top_hit},
+                "provenance": citation,
+            }
+        else:
+            return {
+                "status": "success",
+                "intent": intent,
+                "target_engine": target_engine,
+                "response_text": (
+                    "Hiện tại chưa tìm thấy điều khoản quy chế chính xác trong Sổ tay SV HCMUS "
+                    "cho câu hỏi này. Bạn vui lòng liên hệ Phòng Đào tạo để được hướng dẫn chi tiết."
+                ),
+                "data": {"total_matches": 0},
+                "provenance": None,
+            }
+
+    # ----------------------------------------------------
+    # Nhánh C: Câu hỏi mơ hồ cần làm rõ (R5)
+    # ----------------------------------------------------
+    elif intent == INTENT_CLARIFY:
+        return {
+            "status": "needs_clarification",
+            "intent": intent,
+            "target_engine": target_engine,
+            "response_text": route_info.get(
+                "message",
+                "Chào bạn! Bạn cần H.E.R.M.E.S hỗ trợ về tính điểm GPA, lập lịch ôn thi hay tra cứu quy chế?",
+            ),
+            "data": {},
+            "provenance": None,
+        }
+
+    # ----------------------------------------------------
+    # Nhánh D: Các tác vụ khác / Fallback
+    # ----------------------------------------------------
+    else:
+        return {
+            "status": "success",
+            "intent": intent,
+            "target_engine": target_engine,
+            "response_text": route_info.get("message", "Yêu cầu đã được tiếp nhận."),
+            "data": extracted,
+            "provenance": None,
+        }

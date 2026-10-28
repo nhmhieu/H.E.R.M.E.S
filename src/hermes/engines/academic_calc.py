@@ -42,6 +42,10 @@ def calculate_gpa_10(grades: list[tuple[float, int]]) -> float:
     return round(total_points / total_credits, 2)
 
 
+# Alias for backward compatibility
+calculate_gpa = calculate_gpa_10
+
+
 def calculate_gpa_4(grades: list[tuple[float, int]]) -> float:
     """
     Tính Điểm trung bình (GPA) hệ 4:

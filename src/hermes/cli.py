@@ -1,12 +1,18 @@
+import sys
 import click
 from rich.console import Console
 from rich.table import Table
 
 from hermes.engines.academic_calc import calculate_gpa, check_academic_warning
 from hermes.engines.scheduler import generate_study_plan
-from hermes.security.guardrails import sanitize_input
 
-console = Console()
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+
+console = Console(legacy_windows=False)
 
 
 @click.group()
@@ -101,16 +107,22 @@ def plan(subject, hours, days):
 @cli.command()
 @click.argument("query")
 def ask(query):
-    """Ask H.E.R.M.E.S a question (routes via guardrails)."""
-    is_safe, msg = sanitize_input(query)
-    if not is_safe:
-        console.print(f"[bold red]Security Block:[/bold red] {msg}")
-        return
+    """Hỏi H.E.R.M.E.S bất kỳ câu hỏi nào (Tự động quét an toàn và điều phối)."""
+    from hermes.router.orchestrator import orchestrate
 
-    console.print(f"[green]Processing safe query:[/green] {query}")
-    console.print(
-        "[italic yellow](Routing to LLM/RAG engines not fully implemented yet.)[/italic yellow]"
-    )
+    res = orchestrate(query)
+    if res["status"] == "blocked":
+        console.print(f"[bold red]⛔ Bị chặn:[/bold red] {res['response_text']}")
+    elif res["status"] == "needs_clarification":
+        console.print(
+            f"[bold yellow]❓ Cần làm rõ:[/bold yellow] {res['response_text']}"
+        )
+    else:
+        console.print(
+            f"[bold green]🤖 H.E.R.M.E.S Phản hồi:[/bold green]\n{res['response_text']}"
+        )
+        if res.get("provenance"):
+            console.print(f"\n[italic cyan]📌 Nguồn: {res['provenance']}[/italic cyan]")
 
 
 if __name__ == "__main__":
