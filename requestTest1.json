@@ -1,0 +1,96 @@
+{
+    "metadata":{
+        "project_name": "H.E.R.M.E.S",
+        "moudle": "User Interface",
+        "author": "Thành viên 5 - Phan Huỳnh Minh Tuấn",
+        "reviewer": "Thành viên 6 - Hồ Ngọc Như Ý",
+        "total_test_cases": 12,
+        "last_update": "2026-10-24"
+    },
+    "test_cases": [
+      {
+        "id": "TC-UI-001",
+        "feature": "CLI_Argparse",
+        "user_action": "Gõ lệnh: hermes ask (không có ngoặc kép chứa câu hỏi)",
+        "expected_behavior": "Terminal không bị crash. Thư viện argparse tự động in ra bảng hướng dẫn sử dụng (help menu) thông báo thiếu tham số 'question'.",
+        "status": "Pending"
+      },
+      {
+        "id": "TC-UI-002",
+        "feature": "CLI_Rich_Table",
+        "user_action": "Thuật toán trả về tên môn học rất dài: 'Nhập môn Cơ sở dữ liệu quan hệ và Hệ quản trị CSDL'",
+      "expected_behavior": "Bảng rich table tự động xuống dòng chữ trong cột 'Môn học' thay vì làm vỡ khung viền bảng màu cyan.",
+      "status": "Pending"
+    },
+    {
+      "id": "TC-UI-003",
+      "feature": "Web_Sidebar_Form",
+      "user_action": "Người dùng nhập số tín chỉ là 15 vào st.number_input trên Sidebar rồi bấm Cập nhật",
+      "expected_behavior": "Streamlit chặn ngay tại ô nhập liệu (do max_value=10), hiện cảnh báo đỏ nhắc nhở tín chỉ không hợp lệ.",
+      "status": "Pending"
+    },
+    {
+      "id": "TC-UI-004",
+      "feature": "Web_Chat_Spinner",
+      "user_action": "Nhấn gửi câu hỏi và spam click liên tục vào nút gửi lần 2",
+      "expected_behavior": "Trong 1.5 giây st.spinner('H.E.R.M.E.S đang xử lý...') đang quay, ô nhập liệu chat_input tạm thời bị vô hiệu hóa (disabled) để chống spam request.",
+      "status": "Pending"
+    },
+    {
+      "id": "TC-UI-005",
+      "feature": "Web_Sidebar_Form",
+      "user_action": "Nhập điểm số là 11.5 vào ô 'Điểm hệ 10' và nhấn submit.",
+      "expected_behavior": "Giao diện chặn submit do vượt quá giới hạn max_value=10.0, yêu cầu nhập lại đúng dải điểm 0-10.",
+      "status": "Pending"
+    },
+    {
+      "id": "TC-UI-006",
+      "feature": "CLI_Argparse",
+      "user_action": "Gõ sai tên lệnh phụ: hermes ak 'tính điểm'",
+      "expected_behavior": "Hệ thống báo lỗi 'invalid choice: ak' và gợi ý lệnh đúng là 'ask'. Không văng lỗi Python stack trace khó hiểu.",
+      "status": "Pending"
+    },
+    {
+      "id": "TC-UI-007",
+      "feature": "Web_Chat_Input",
+      "user_action": "Dán một đoạn văn bản dài hơn 2000 ký tự vào ô chat_input.",
+      "expected_behavior": "Giao diện vẫn hiển thị mượt mà, khung chat tự động mở rộng chiều cao hoặc có thanh cuộn, không bị tràn layout ra ngoài màn hình.",
+      "status": "Pending"
+    },
+    {
+      "id": "TC-UI-008",
+      "feature": "Web_Sidebar_Form",
+      "user_action": "Để trống ô 'Tên môn học' nhưng vẫn bấm 'Cập nhật điểm'.",
+      "expected_behavior": "Hệ thống hiện cảnh báo st.warning yêu cầu điền tên môn học trước khi lưu, không lưu dữ liệu rác vào bộ nhớ.",
+      "status": "Pending"
+    },
+    {
+      "id": "TC-UI-009",
+      "feature": "Web_Theme",
+      "user_action": "Người dùng chuyển đổi giao diện Streamlit từ Dark Mode sang Light Mode trong phần Settings.",
+      "expected_behavior": "Tất cả text, icon và bảng màu thư viện vẫn hiển thị rõ ràng, độ tương phản tốt, không có hiện tượng chữ trắng trên nền trắng.",
+      "status": "Pending"
+    },
+    {
+      "id": "TC-UI-010",
+      "feature": "Web_Sidebar_Layout",
+      "user_action": "Hệ thống trả về thông báo thành công rất dài trong lệnh st.success trên Sidebar.",
+      "expected_behavior": "Thông báo tự động bẻ dòng (word-wrap) gọn gàng bên trong không gian hẹp của Sidebar, không tạo thanh cuộn ngang gây vướng víu.",
+      "status": "Pending"
+    },
+    {
+      "id": "TC-UI-011",
+      "feature": "CLI_Rich_Table",
+      "user_action": "Hệ thống trả về dữ liệu lịch thi hoặc bảng điểm gồm 15 môn học liên tiếp.",
+      "expected_behavior": "Bảng rich render đủ 15 dòng thẳng hàng, cho phép người dùng cuộn Terminal lên xuống để xem mà cột không bị lệch.",
+      "status": "Pending"
+    },
+    {
+      "id": "TC-UI-012",
+      "feature": "Web_Error_Handling",
+      "user_action": "Ngắt kết nối Wi-Fi trên máy tính ngay sau khi bấm gửi câu hỏi (lúc spinner đang quay).",
+      "expected_behavior": "Giao diện hiển thị thông báo lỗi mạng thân thiện (ví dụ: st.error('Mất kết nối')) thay vì văng nguyên cụm lỗi WebSocket của Streamlit.",
+      "status": "Pending"
+    }
+  ]
+}
