@@ -8,10 +8,13 @@ and deterministic input sanitization before routing to LLM engines.
 
 from __future__ import annotations
 
+import base64
+import codecs
 from dataclasses import dataclass
 import os
 import re
 import unicodedata
+import urllib.parse
 
 DEFAULT_MAX_INPUT_LENGTH = 1000
 REDACTED_SECRET_PLACEHOLDER = "[REDACTED_SECRET]"
@@ -148,6 +151,132 @@ INJECTION_PATTERNS = [
         r"(?:\s*[.\-_/~*|\\]\s*o)(?:\s*[.\-_/~*|\\]\s*r)"
         r"(?:\s*[.\-_/~*|\\]\s*e)\b"
     ),
+    # 5. Extended English instruction override
+    (
+        r"(?:ignore|disregard|override|forget)\s+"
+        r"(?:all\s+|any\s+|the\s+)?"
+        r"(?:instructions|prompts|rules|directions|constraints|guidelines|context)\b"
+    ),
+    (
+        r"(?:ignore|disregard|override)\s+(?:the\s+)?"
+        r"(?:above|prior|preceding|previous|earlier)\s+"
+        r"(?:directions|instructions|prompts|rules|context)\b"
+    ),
+    r"forget\s+everything\s+above",
+    (
+        r"(?:do\s+not|don'?t)\s+(?:follow|obey)\s+"
+        r"(?:any\s+|the\s+)?(?:earlier|previous|prior|above)?\s*"
+        r"(?:rules|instructions|directions|prompts|commands)\b"
+    ),
+    # 6. Extended Vietnamese instruction override
+    (
+        r"(?:bỏ\s+qua|phớt\s+lờ|quên)\s+"
+        r"(?:mọi\s+|tất\s+cả\s+|các\s+|toàn\s+bộ\s+|hết\s+)?"
+        r"(?:chỉ\s+dẫn|hướng\s+dẫn|quy\s+tắc|quy\s+định|lệnh|ràng\s+buộc|"
+        r"chính\s+sách|yêu\s+cầu)"
+    ),
+    (
+        r"(?:không\s+(?:cần\s+|được\s+)?)?tuân\s+(?:theo|thủ)\s+"
+        r"(?:quy\s+tắc|quy\s+định|chính\s+sách|hướng\s+dẫn|chỉ\s+dẫn)"
+    ),
+    (
+        r"đừng\s+(?:làm\s+theo|tuân\s+theo)\s+"
+        r"(?:hướng\s+dẫn|quy\s+tắc|quy\s+định|chỉ\s+dẫn|chính\s+sách)"
+    ),
+    (
+        r"(?:vô\s+hiệu\s+hóa|vô\s+hiệu\s+hoá|tắt|bỏ|xóa\s+bỏ|gỡ\s+bỏ)\s+"
+        r"(?:mọi\s+|toàn\s+bộ\s+|các\s+)?"
+        r"(?:bộ\s+lọc|guardrails?|bảo\s+mật|quy\s+tắc|quy\s+định|"
+        r"chính\s+sách|ràng\s+buộc|hướng\s+dẫn|chỉ\s+dẫn)"
+    ),
+    # 7. Role spoofing / mode switching (extended)
+    (
+        r"(?:developer|admin|debug|unrestricted|jailbreak|dan|dev)\s+mode\s+"
+        r"(?:enabled|activated|active|on|is\s+on)"
+    ),
+    (
+        r"(?:pretend|imagine|suppose|assume)\s+"
+        r"(?:to\s+be|you\s+are|the\s+role\s+of)\s+(?:an?\s+)?"
+        r"(?:admin|root|superuser|developer|unrestricted|dan|system)"
+    ),
+    (
+        r"(?:from\s+now\s+on|henceforth)\s*,?\s*"
+        r"(?:you\s+are|act\s+as|be)\b"
+    ),
+    (
+        r"assume\s+(?:the\s+)?(?:role|identity)\s+of\s+(?:an?\s+)?"
+        r"(?:admin|root|superuser|developer|system|dan)"
+    ),
+    r"system\s+override\s*[:\-]?\s*(?:grant|give|allow|enable|override)",
+    (
+        r"(?:đóng|nhập|hoá\s+thân\s+thành)\s+vai\s+(?:một\s+|như\s+)?"
+        r"(?:quản\s+trị\s+viên|admin|root|superuser|developer|ai\s+không\s+bị\s+"
+        r"giới\s+hạn|hệ\s+thống\s+quản\s+trị)"
+    ),
+    # 8. System prompt / secret exfiltration
+    r"(?:your|the)\s+system\s*prompt\b",
+    r"(?:your|the)\s+hidden\s+instructions\b",
+    r"(?:the|your)\s+internal\s+api\s*key\b",
+    r"\ball\s+environment\s+variables\b",
+    r"(?:the|your)\s+original\s+developer\s+message\b",
+    r"(?:your|the)\s+configuration\s+secrets?\b",
+    (
+        r"(?:list|show|print|dump|reveal|display|output|read\s+out)\s+"
+        r"(?:me\s+)?(?:all\s+)?(?:environment\s+variables|env\s+vars)\b"
+    ),
+    r"prompt\s+hệ\s+thống",
+    r"hướng\s+dẫn\s+nội\s+bộ",
+    r"cấu\s+hình\s+bí\s+mật",
+    r"khóa\s+bí\s+mật",
+    r"(?:khóa|khoá)\s+api\b",
+    r"biến\s+môi\s+trường",
+    r"văn\s+bản\s+phía\s+trên",
+    r"toàn\s+bộ\s+văn\s+bản",
+    r"chỉ\s+dẫn\s+hệ\s+thống",
+    # 9. Jailbreak / safety bypass (extended)
+    (
+        r"(?:turn\s+off|disable|remove|bypass)\s+(?:the\s+|all\s+|your\s+)?"
+        r"(?:content\s+policy|safety\s+"
+        r"(?:polic(?:y|ies)|guardrails?|filters?|rules?)|restrictions?)"
+    ),
+    (
+        r"reveal\s+(?:restricted|forbidden|hidden)\s+"
+        r"(?:knowledge|information|content)"
+    ),
+    r"without\s+(?:any\s+|all\s+)?restrictions?\b",
+    (
+        r"(?:jailbreak|bypass)\s+(?:the\s+|all\s+)?"
+        r"(?:model|ai|filter|filters|guardrails|safety)"
+    ),
+    r"emergency\s+override\b",
+    # 10. Delimiter / context injection
+    r"<<\s*sys\s*>>",
+    r"<\|?\s*(?:im_start|im_end|endoftext)\s*\|?>",
+    (
+        r"\b(?:begin|start|end)\s+(?:of\s+)?system\s+"
+        r"(?:message|prompt|directive|context|instructions?)\b"
+    ),
+    r"\{\{[^}\n]{0,80}(?:system[_\s]*prompt|override|jailbreak)[^}\n]{0,80}\}\}",
+    # 11. Encoding / decode instructions
+    r"(?:base64|rot13|hex|url)\s*[-_]?\s*(?:decode|decoded|encoded?)\b",
+    r"\bdecode\s+and\s+(?:follow|execute|obey|apply)\b",
+    (
+        r"(?:read|interpret)\s+(?:this\s+|the\s+following\s+)?"
+        r"(?:backwards|in\s+reverse)\b"
+    ),
+    r"đọc\s+ngược",
+    # 12. Multilingual instruction override / exfiltration
+    r"忽略[^\n]{0,40}(?:指令|指示|提示|系统)",
+    r"(?:無視|指示)[^\n]{0,40}(?:指示|命令|プロンプト|無視|システム)",
+    r"(?:무시|지시)[^\n]{0,40}(?:지시|명령|프롬프트|무시)",
+    (
+        r"\bignor(?:a|e|ez|iere|i|are|emos|en|ando)\b"
+        r"[^\n]{0,70}(?:instruc|anweisung|prompt|sistema|syst[eè]me)"
+    ),
+    r"\bигнор\w*[^\n]{0,70}(?:инструкц|промпт|систем)",
+    r"инструкц\w*[^\n]{0,50}(?:покаж|открой|игнор)",
+    r"เพิกเฉย[^\n]{0,70}(?:คำสั่ง|พรอมต์|ระบบ)",
+    r"\babaikan\b[^\n]{0,70}(?:instruksi|prompt|sistem)",
 ]
 
 # Patterns for demanding raw/direct answers without explanation (Always blocked)
@@ -183,6 +312,14 @@ DIRECT_ANSWER_PATTERNS = [
         r"(?:no\s+|without\s+(?:any\s+)?)(?:explanation|explaining)\s*"
         r"(?:,\s*|\s+|-\s*)(?:just|only)\s+(?:give\s+(?:me\s+)?)?"
         r"(?:the\s+)?(?:final\s+|exact\s+)?(?:answer|solution|code)"
+    ),
+    # Bare final answer / answer key requests (no explanation wording required)
+    r"\bfinal\s+answer\b",
+    r"\banswer\s+key\b",
+    r"đáp\s+án\s+cuối\s+cùng",
+    (
+        r"(?:tell|give|send|provide|show|want|need)\s+(?:me\s+)?(?:the\s+)?"
+        r"(?:final|exact|correct|direct)\s+(?:answer|solution)"
     ),
 ]
 
@@ -284,6 +421,43 @@ FORBIDDEN_HOMEWORK_PATTERNS = [
     (r"\bcode\s+(?:hộ|thay|dùm|giùm)\s+(?:tôi|mình|em|bài)\b"),
 ]
 
+# Extended homework-intent patterns (semantic action + graded work object).
+# Applied only when the message has no explicit learning/hint intent, so that
+# legitimate tutoring requests such as "đang làm bài tập, xin gợi ý" stay safe.
+EXTENDED_HOMEWORK_PATTERNS = [
+    # English: action verb + graded work object (word order independent)
+    (
+        r"\bwrite\s+(?:the\s+|my\s+|a\s+)?"
+        r"(?:complete\s+|full\s+|entire\s+|whole\s+)?"
+        r"(?:code|program|solution|report|essay)\b[^.\n]{0,40}"
+        r"\b(?:assignment|homework|lab|project|exam|test)\b"
+    ),
+    r"\bwrite\s+(?:my|the)\s+(?:project\s+)?report\s+for\s+me\b",
+    (
+        r"\bsolve\s+(?:my|this|the|our)\b[^.\n]{0,40}"
+        r"\b(?:homework|assignment|lab|exam|test|problem|questions?)\b"
+    ),
+    (
+        r"\bcomplete\s+(?:this|my|the)\b[^.\n]{0,40}"
+        r"\b(?:homework|assignment|lab|exam|test|project)\b"
+    ),
+    (
+        r"\bdo\s+(?:my|this|the)\b[^.\n]{0,30}"
+        r"\b(?:homework|assignment|lab|exam|test|project|questions?)\b"
+    ),
+    # Vietnamese: action verb + graded work object (word order independent)
+    (
+        r"\b(?:giải|làm|hoàn\s+thành|viết|thực\s+hiện)\b[^.\n]{0,40}?"
+        r"\b(?:bài\s+tập|bài\s+lab|bài\s+thi|bài\s+kiểm\s+tra|"
+        r"đề\s+thi|đề\s+bài)\b"
+    ),
+    (
+        r"\bviết\s+(?:mã\s+)?"
+        r"(?:code|chương\s+trình|lời\s+giải|bài\s+giải)\b"
+        r"[^.\n]{0,30}?\b(?:hoàn\s+chỉnh|đầy\s+đủ|full|toàn\s+bộ)\b"
+    ),
+]
+
 # Layer D Privacy & Secret Protection
 _SECRET_CONVERSATIONAL_STOPWORDS = {
     "là",
@@ -383,15 +557,177 @@ def _build_compact_pattern(pattern: str) -> str:
     return compact
 
 
+def _strip_diacritics(text: str) -> str:
+    """
+    Remove Vietnamese/Latin diacritics and combining marks while keeping the
+    base letters. Used for detection only so accented attacks cannot bypass
+    keyword matching when combining marks are injected.
+    """
+    normalized = text.replace("đ", "d").replace("Đ", "D")
+    decomposed = unicodedata.normalize("NFD", normalized)
+    return "".join(ch for ch in decomposed if unicodedata.category(ch) != "Mn")
+
+
+def _fold_pattern(pattern: str) -> str:
+    """Create a diacritic-insensitive counterpart of a regex pattern."""
+    return _strip_diacritics(pattern)
+
+
+_LEET_TRANSLATION = str.maketrans("431057", "aeiost")
+
+_HOMOGLYPH_TRANSLATION = str.maketrans(
+    {
+        "а": "a", "е": "e", "і": "i", "о": "o", "с": "c", "р": "p",
+        "х": "x", "у": "y", "ѕ": "s", "ј": "j", "ԁ": "d", "ӏ": "l",
+        "А": "a", "Е": "e", "І": "i", "О": "o", "С": "c", "Р": "p",
+        "Х": "x", "У": "y", "Ѕ": "s", "Ј": "j", "Ԁ": "d", "Ӏ": "l",
+        "α": "a", "ε": "e", "ι": "i", "ο": "o", "ρ": "p", "χ": "x",
+        "υ": "y", "Α": "a", "Ε": "e", "Ι": "i", "Ο": "o", "Ρ": "p",
+        "Χ": "x", "Υ": "y",
+    }
+)
+
+
+def _leet_normalize(text: str) -> str:
+    """Undo common leetspeak substitutions (4->a, 3->e, 1->i, 0->o, 5->s, 7->t)."""
+    return text.translate(_LEET_TRANSLATION)
+
+
+def _homoglyph_normalize(text: str) -> str:
+    """Map common Cyrillic/Greek homoglyphs back to their Latin lookalikes."""
+    return text.translate(_HOMOGLYPH_TRANSLATION)
+
+
+def _decode_payloads(text: str) -> list[str]:
+    """
+    Attempt bounded decoding of ROT13/Base64/hex/URL-encoded payloads. Any
+    decoded result is treated as another text variant to scan, so encoded
+    injection cannot hide from the regex layer.
+    """
+    decoded: list[str] = []
+    lower = text.lower()
+
+    if "rot13" in lower:
+        payload = text.split(":", 1)[1] if ":" in text else text
+        try:
+            decoded.append(codecs.decode(payload, "rot13"))
+        except (ValueError, UnicodeError):
+            pass
+        try:
+            decoded.append(codecs.decode(text, "rot13"))
+        except (ValueError, UnicodeError):
+            pass
+
+    if "base64" in lower:
+        for match in re.finditer(r"[A-Za-z0-9+/]{8,}={0,2}", text):
+            blob = match.group(0)
+            try:
+                raw = base64.b64decode(
+                    blob + "=" * (-len(blob) % 4), validate=False
+                )
+                candidate = raw.decode("utf-8", errors="ignore")
+            except (ValueError, UnicodeError):
+                continue
+            if candidate.strip():
+                decoded.append(candidate)
+
+    if "hex" in lower:
+        for match in re.finditer(r"(?:[0-9a-fA-F]{2}\s*){6,}", text):
+            try:
+                decoded.append(
+                    bytes.fromhex(match.group(0).replace(" ", "")).decode(
+                        "utf-8", errors="ignore"
+                    )
+                )
+            except (ValueError, UnicodeError):
+                continue
+
+    if re.search(r"%[0-9a-fA-F]{2}", text):
+        try:
+            decoded.append(urllib.parse.unquote(text))
+        except (ValueError, UnicodeError):
+            pass
+
+    return decoded
+
+
+def _build_detection_variants(text: str) -> list[str]:
+    """
+    Build every relevant normalized view of an input for security scanning:
+    original case-folded text, spaced-letter collapse, compact letters,
+    diacritic-free, leetspeak, homoglyph, slash-separated, decoded, and
+    reversed forms. Scanning all views closes common obfuscation bypasses.
+    """
+    compat = unicodedata.normalize("NFKC", text)
+    no_zw = "".join(ch for ch in compat if ch not in ZERO_WIDTH_CHARS)
+    base = " ".join(no_zw.lower().split())
+
+    variants: set[str] = {base}
+    scan = _collapse_spaced_letters(base)
+    variants.add(scan)
+    variants.add(_COMPACT_SINGLE_LETTERS_RE.sub(r"\1", base))
+
+    for seed in tuple(variants):
+        variants.add(_strip_diacritics(seed))
+
+    if re.search(r"[013457]", base):
+        leet = _leet_normalize(base)
+        variants.add(leet)
+        variants.add(_strip_diacritics(leet))
+
+    if re.search(r"[^\x00-\x7f]", base):
+        homoglyph = _homoglyph_normalize(base)
+        variants.add(homoglyph)
+        variants.add(_strip_diacritics(homoglyph))
+
+    if re.search(r"[\\/|]", base):
+        slashed = re.sub(r"[\\/|]+", " ", base)
+        variants.add(slashed)
+        variants.add(_strip_diacritics(slashed))
+
+    for payload in _decode_payloads(text):
+        payload_base = " ".join(
+            "".join(
+                ch for ch in unicodedata.normalize("NFKC", payload)
+                if ch not in ZERO_WIDTH_CHARS
+            ).lower().split()
+        )
+        if not payload_base:
+            continue
+        variants.add(payload_base)
+        variants.add(_strip_diacritics(payload_base))
+        variants.add(_collapse_spaced_letters(payload_base))
+        variants.add(_strip_diacritics(_collapse_spaced_letters(payload_base)))
+
+    if re.search(r"(?:backwards|reverse|ngược|đảo\s+ngược)", base):
+        reversed_full = base[::-1]
+        variants.add(reversed_full)
+        variants.add(_strip_diacritics(reversed_full))
+
+    return [variant for variant in variants if variant]
+
+
 # Pre-compiled combined regexes (operating on lowercased text for <1.2 ms speed)
 _COMBINED_STD_INJECTION_RE = re.compile(
     "|".join(f"(?:{p})" for p in INJECTION_PATTERNS)
 )
+_COMBINED_DEACC_INJECTION_RE = re.compile(
+    "|".join(f"(?:{_fold_pattern(p)})" for p in INJECTION_PATTERNS)
+)
 _COMBINED_COMPACT_INJECTION_RE = re.compile(
     "|".join(f"(?:{_build_compact_pattern(p)})" for p in INJECTION_PATTERNS)
 )
+_COMBINED_DEACC_COMPACT_INJECTION_RE = re.compile(
+    "|".join(
+        f"(?:{_build_compact_pattern(_fold_pattern(p))})"
+        for p in INJECTION_PATTERNS
+    )
+)
 _COMBINED_DIRECT_ANSWER_RE = re.compile(
     "|".join(f"(?:{p})" for p in DIRECT_ANSWER_PATTERNS)
+)
+_COMBINED_DEACC_DIRECT_ANSWER_RE = re.compile(
+    "|".join(f"(?:{_fold_pattern(p)})" for p in DIRECT_ANSWER_PATTERNS)
 )
 _COMBINED_LEARNING_INTENT_RE = re.compile(
     "|".join(f"(?:{p})" for p in LEARNING_INTENT_PATTERNS)
@@ -399,6 +735,18 @@ _COMBINED_LEARNING_INTENT_RE = re.compile(
 _COMBINED_FORBIDDEN_HOMEWORK_RE = re.compile(
     "|".join(f"(?:{p})" for p in FORBIDDEN_HOMEWORK_PATTERNS)
 )
+_COMBINED_DEACC_FORBIDDEN_HOMEWORK_RE = re.compile(
+    "|".join(f"(?:{_fold_pattern(p)})" for p in FORBIDDEN_HOMEWORK_PATTERNS)
+)
+_COMBINED_EXTENDED_HOMEWORK_RE = re.compile(
+    "|".join(f"(?:{p})" for p in EXTENDED_HOMEWORK_PATTERNS)
+)
+_COMBINED_DEACC_EXTENDED_HOMEWORK_RE = re.compile(
+    "|".join(f"(?:{_fold_pattern(p)})" for p in EXTENDED_HOMEWORK_PATTERNS)
+)
+_NEGATED_HOMEWORK_PREFIX_DEACC_RE = re.compile(_fold_pattern(
+    _NEGATED_HOMEWORK_PREFIX_RE.pattern
+))
 _MULTI_SPACE_LETTERS_RE = re.compile(r"[^\W\d_]\s{2,}[^\W\d_]")
 _SINGLE_SPACE_BETWEEN_LETTERS_RE = re.compile(
     r"(?<![^\W\d_])([^\W\d_])\s(?![\s])(?=[^\W\d_](?![^\W\d_]))"
@@ -574,8 +922,11 @@ def _matches_injection(
 ) -> bool:
     """
     Evaluate lowercased text views against combined injection regexes.
+    Retained for backwards compatibility with callers/tests.
     """
     if _COMBINED_STD_INJECTION_RE.search(plain_lower):
+        return True
+    if _COMBINED_DEACC_INJECTION_RE.search(plain_lower):
         return True
     if scan_text != plain_lower and _COMBINED_STD_INJECTION_RE.search(scan_text):
         return True
@@ -586,15 +937,71 @@ def _matches_injection(
     return False
 
 
-def _has_affirmative_forbidden_homework(text: str) -> bool:
-    """
-    Return True if lowercased text matches FORBIDDEN_HOMEWORK_PATTERNS without
-    an immediate negation prefix (such as 'đừng ', 'không cần ', 'instead of ').
-    """
-    for match in _COMBINED_FORBIDDEN_HOMEWORK_RE.finditer(text):
-        prefix = text[max(0, match.start() - 35) : match.start()]
-        if not _NEGATED_HOMEWORK_PREFIX_RE.search(prefix):
+def _detect_injection(variants: list[str]) -> bool:
+    """Scan every normalized variant for prompt injection / obfuscation."""
+    for variant in variants:
+        if _COMBINED_STD_INJECTION_RE.search(variant):
             return True
+        if _COMBINED_DEACC_INJECTION_RE.search(variant):
+            return True
+        compact = _COMPACT_SINGLE_LETTERS_RE.sub(r"\1", variant)
+        if compact != variant:
+            if _COMBINED_COMPACT_INJECTION_RE.search(compact):
+                return True
+            if _COMBINED_DEACC_COMPACT_INJECTION_RE.search(compact):
+                return True
+    return False
+
+
+def _detect_direct_answer(variants: list[str]) -> bool:
+    """Scan every normalized variant for bare-answer/exam-cheating requests."""
+    return any(
+        _COMBINED_DIRECT_ANSWER_RE.search(variant)
+        or _COMBINED_DEACC_DIRECT_ANSWER_RE.search(variant)
+        for variant in variants
+    )
+
+
+def _has_affirmative_forbidden_homework(
+    text: str,
+    combined_re: re.Pattern[str] = _COMBINED_FORBIDDEN_HOMEWORK_RE,
+    negation_re: re.Pattern[str] = _NEGATED_HOMEWORK_PREFIX_RE,
+) -> bool:
+    """
+    Return True if text matches FORBIDDEN_HOMEWORK_PATTERNS without an immediate
+    negation prefix (such as 'đừng ', 'không cần ', 'instead of ').
+    """
+    for match in combined_re.finditer(text):
+        prefix = text[max(0, match.start() - 35) : match.start()]
+        if not negation_re.search(prefix):
+            return True
+    return False
+
+
+def _detect_homework(variants: list[str], has_learning_intent: bool) -> bool:
+    """Scan every normalized variant for full-homework-solving requests."""
+    for variant in variants:
+        if _has_affirmative_forbidden_homework(variant):
+            return True
+        if not has_learning_intent:
+            if _has_affirmative_forbidden_homework(
+                variant,
+                _COMBINED_DEACC_FORBIDDEN_HOMEWORK_RE,
+                _NEGATED_HOMEWORK_PREFIX_DEACC_RE,
+            ):
+                return True
+            if _has_affirmative_forbidden_homework(
+                variant,
+                _COMBINED_EXTENDED_HOMEWORK_RE,
+                _NEGATED_HOMEWORK_PREFIX_RE,
+            ):
+                return True
+            if _has_affirmative_forbidden_homework(
+                variant,
+                _COMBINED_DEACC_EXTENDED_HOMEWORK_RE,
+                _NEGATED_HOMEWORK_PREFIX_DEACC_RE,
+            ):
+                return True
     return False
 
 
@@ -715,14 +1122,13 @@ def validate_and_clean(
             category="garbage_input",
         )
 
-    # Compute normalized detection views once
+    # Compute normalized detection views once (includes deobfuscation variants)
     compat_lower = unicodedata.normalize("NFKC", stripped).lower()
     plain_lower = " ".join(compat_lower.split())
-    scan_text = _collapse_spaced_letters(plain_lower)
-    compact_text = _COMPACT_SINGLE_LETTERS_RE.sub(r"\1", plain_lower)
+    variants = _build_detection_variants(stripped)
 
     # Layer B: Prompt Injection & Obfuscation detection
-    if _matches_injection(plain_lower, scan_text, compact_text):
+    if _detect_injection(variants):
         return GuardrailResult(
             allowed=False,
             cleaned_text="",
@@ -731,9 +1137,7 @@ def validate_and_clean(
         )
 
     # Layer C: Academic Policy Enforcement (Non-goals R1)
-    if _COMBINED_DIRECT_ANSWER_RE.search(plain_lower) or (
-        scan_text != plain_lower and _COMBINED_DIRECT_ANSWER_RE.search(scan_text)
-    ):
+    if _detect_direct_answer(variants):
         return GuardrailResult(
             allowed=False,
             cleaned_text="",
@@ -746,11 +1150,7 @@ def validate_and_clean(
 
     has_learning_intent = bool(_COMBINED_LEARNING_INTENT_RE.search(plain_lower))
 
-    if _has_affirmative_forbidden_homework(plain_lower) or (
-        not has_learning_intent
-        and scan_text != plain_lower
-        and _has_affirmative_forbidden_homework(scan_text)
-    ):
+    if _detect_homework(variants, has_learning_intent):
         return GuardrailResult(
             allowed=False,
             cleaned_text="",

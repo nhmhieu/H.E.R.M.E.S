@@ -13,18 +13,21 @@ import json
 import os
 from pathlib import Path
 import re
+import time
 from typing import Any
 import urllib.error
 import urllib.request
 
 from hermes.security.guardrails import (
-    INJECTION_PATTERNS,
     ZERO_WIDTH_CHARS,
-    _normalize_for_detection,
+    validate_and_clean,
 )
 
 DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
 DEFAULT_AI_MODE = "mock"
+_MODEL_NAME_RE = re.compile(r"^[A-Za-z0-9._-]+$")
+_RETRYABLE_HTTP_STATUS = {429, 500, 502, 503, 504}
+_MAX_HTTP_ATTEMPTS = 3
 UNKNOWN_VALUE = "Chưa xác định"
 PLACEHOLDER_API_KEYS = {
     "",
@@ -112,13 +115,20 @@ class AnnouncementExtractResult:
         return asdict(self)
 
 
+def _project_root() -> Path:
+    """Return the project root (three levels above ``src/hermes/ai/client.py``)."""
+    return Path(__file__).resolve().parents[3]
+
+
 def _load_env_file(dotenv_path: Path | None = None) -> None:
     """
     Lightweight .env loader using Python standard library.
+    Resolves the default ``.env`` from the project root rather than the current
+    working directory, so running the CLI elsewhere cannot load the wrong file.
     Supports comments, blank lines, optional 'export ' prefix, whitespace,
     and single/double-quoted values without overwriting existing OS env vars.
     """
-    target = dotenv_path or Path.cwd() / ".env"
+    target = dotenv_path or _project_root() / ".env"
     if not target.is_file():
         return
 
@@ -174,25 +184,18 @@ def _redact_secret(message: str, secret: str | None) -> str:
 
 
 def _segment_has_injection(segment: str) -> bool:
-    """Check whether an announcement segment contains embedded prompt injection."""
+    """
+    Check whether an announcement segment contains embedded prompt injection.
+
+    Runs the full Guardrails pipeline (not only ``INJECTION_PATTERNS``) so
+    exfiltration, homework, encoded, delimiter and multilingual attacks that
+    are embedded in untrusted announcement text are also isolated.
+    """
+    if not isinstance(segment, str) or not segment.strip():
+        return False
     if any(ch in ZERO_WIDTH_CHARS for ch in segment):
         return True
-    lowered = " ".join(segment.lower().split())
-    normalized = _normalize_for_detection(segment)
-    compact = re.sub(
-        r"(?<![^\W\d_])([^\W\d_])[\s._\-/~*|\\]+(?=[^\W\d_](?![^\W\d_]))",
-        r"\1",
-        segment.lower(),
-    )
-    for pat in INJECTION_PATTERNS:
-        if re.search(pat, lowered, re.IGNORECASE) or re.search(
-            pat, normalized, re.IGNORECASE
-        ):
-            return True
-        compact_pat = pat.replace(r"\s+", r"[\s._\-]*").replace(r"\s*", r"[\s._\-]*")
-        if re.search(compact_pat, compact, re.IGNORECASE):
-            return True
-    return False
+    return not validate_and_clean(segment).allowed
 
 
 def _isolate_suspicious_segments(raw_text: str) -> tuple[str, list[str]]:
@@ -398,6 +401,11 @@ class HermesAIClient:
             else os.getenv("GEMINI_MODEL", DEFAULT_GEMINI_MODEL)
         )
         self.model = str(raw_model).strip() or DEFAULT_GEMINI_MODEL
+        if not _MODEL_NAME_RE.fullmatch(self.model):
+            raise AIConfigError(
+                "Invalid GEMINI_MODEL name. Only letters, digits, '.', '_' and "
+                "'-' are allowed."
+            )
 
         if (
             not isinstance(timeout, (int, float))
@@ -426,6 +434,8 @@ class HermesAIClient:
         """
         if not isinstance(prompt, str) or not prompt.strip():
             raise AIClientError("Prompt cannot be empty when calling AI client.")
+        if system_instruction is not None and not isinstance(system_instruction, str):
+            raise AIClientError("system_instruction must be a string when provided.")
 
         if self.mode == "mock":
             return self._generate_mock(prompt=prompt)
@@ -641,7 +651,10 @@ class HermesAIClient:
 
         try:
             client = genai.Client(api_key=self.api_key)
-            config_kwargs: dict[str, Any] = {"temperature": 0.2}
+            config_kwargs: dict[str, Any] = {
+                "temperature": 0.2,
+                "max_output_tokens": 2048,
+            }
             if system_instruction:
                 config_kwargs["system_instruction"] = system_instruction
 
@@ -694,7 +707,10 @@ class HermesAIClient:
         )
         payload: dict[str, Any] = {
             "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-            "generationConfig": {"temperature": 0.2},
+            "generationConfig": {
+                "temperature": 0.2,
+                "maxOutputTokens": 2048,
+            },
         }
         if system_instruction:
             payload["systemInstruction"] = {"parts": [{"text": system_instruction}]}
@@ -710,34 +726,50 @@ class HermesAIClient:
             method="POST",
         )
 
-        try:
-            with urllib.request.urlopen(request, timeout=self.timeout) as resp:
-                raw_body = resp.read().decode("utf-8", errors="replace")
-        except urllib.error.HTTPError as exc:
-            err_body = ""
+        raw_body = ""
+        for attempt in range(1, _MAX_HTTP_ATTEMPTS + 1):
             try:
-                err_body = exc.read().decode("utf-8", errors="replace")
-            except Exception:
-                err_body = str(exc)
-            safe_msg = _redact_secret(err_body, self.api_key)
-            raise AIClientError(
-                f"Gemini API HTTP {exc.code} error: {safe_msg[:200]}"
-            ) from None
-        except urllib.error.URLError as exc:
-            reason = getattr(exc, "reason", exc)
-            if isinstance(reason, TimeoutError) or "timed out" in str(reason).lower():
+                with urllib.request.urlopen(request, timeout=self.timeout) as resp:
+                    raw_body = resp.read().decode("utf-8", errors="replace")
+                break
+            except urllib.error.HTTPError as exc:
+                if (
+                    exc.code in _RETRYABLE_HTTP_STATUS
+                    and attempt < _MAX_HTTP_ATTEMPTS
+                ):
+                    time.sleep(0.2 * attempt)
+                    continue
+                err_body = ""
+                try:
+                    err_body = exc.read().decode("utf-8", errors="replace")
+                except Exception:
+                    err_body = str(exc)
+                safe_msg = _redact_secret(err_body, self.api_key)
+                raise AIClientError(
+                    f"Gemini API HTTP {exc.code} error: {safe_msg[:200]}"
+                ) from None
+            except urllib.error.URLError as exc:
+                reason = getattr(exc, "reason", exc)
+                if (
+                    isinstance(reason, TimeoutError)
+                    or "timed out" in str(reason).lower()
+                ):
+                    raise AIClientError("Gemini API request timed out.") from None
+                safe_msg = _redact_secret(str(reason), self.api_key)
+                raise AIClientError(
+                    f"Network error while connecting to Gemini API: {safe_msg}"
+                ) from None
+            except TimeoutError:
                 raise AIClientError("Gemini API request timed out.") from None
-            safe_msg = _redact_secret(str(reason), self.api_key)
+            except OSError as exc:
+                safe_msg = _redact_secret(str(exc), self.api_key)
+                raise AIClientError(
+                    f"Network/OS error while connecting to Gemini API: {safe_msg}"
+                ) from None
+        else:
             raise AIClientError(
-                f"Network error while connecting to Gemini API: {safe_msg}"
-            ) from None
-        except TimeoutError:
-            raise AIClientError("Gemini API request timed out.") from None
-        except OSError as exc:
-            safe_msg = _redact_secret(str(exc), self.api_key)
-            raise AIClientError(
-                f"Network/OS error while connecting to Gemini API: {safe_msg}"
-            ) from None
+                "Gemini API request failed after multiple retry attempts."
+            )
 
         try:
             parsed = json.loads(raw_body)
@@ -795,13 +827,14 @@ def generate_response(
     mode: str | None = None,
     api_key: str | None = None,
     model: str | None = None,
+    system_instruction: str | None = None,
 ) -> str:
     """
     Public wrapper function used by H.E.R.M.E.S engines/router (R4).
-    Returns the generated response string.
+    Optionally forwards a system instruction and returns the response string.
     """
     client = HermesAIClient(mode=mode, api_key=api_key, model=model)
-    response = client.generate(prompt)
+    response = client.generate(prompt, system_instruction=system_instruction)
     return response.text
 
 
