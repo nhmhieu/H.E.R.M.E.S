@@ -733,10 +733,7 @@ class HermesAIClient:
                     raw_body = resp.read().decode("utf-8", errors="replace")
                 break
             except urllib.error.HTTPError as exc:
-                if (
-                    exc.code in _RETRYABLE_HTTP_STATUS
-                    and attempt < _MAX_HTTP_ATTEMPTS
-                ):
+                if exc.code in _RETRYABLE_HTTP_STATUS and attempt < _MAX_HTTP_ATTEMPTS:
                     time.sleep(0.2 * attempt)
                     continue
                 err_body = ""

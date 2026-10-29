@@ -199,10 +199,7 @@ INJECTION_PATTERNS = [
         r"(?:to\s+be|you\s+are|the\s+role\s+of)\s+(?:an?\s+)?"
         r"(?:admin|root|superuser|developer|unrestricted|dan|system)"
     ),
-    (
-        r"(?:from\s+now\s+on|henceforth)\s*,?\s*"
-        r"(?:you\s+are|act\s+as|be)\b"
-    ),
+    (r"(?:from\s+now\s+on|henceforth)\s*,?\s*" r"(?:you\s+are|act\s+as|be)\b"),
     (
         r"assume\s+(?:the\s+)?(?:role|identity)\s+of\s+(?:an?\s+)?"
         r"(?:admin|root|superuser|developer|system|dan)"
@@ -577,13 +574,44 @@ _LEET_TRANSLATION = str.maketrans("431057", "aeiost")
 
 _HOMOGLYPH_TRANSLATION = str.maketrans(
     {
-        "а": "a", "е": "e", "і": "i", "о": "o", "с": "c", "р": "p",
-        "х": "x", "у": "y", "ѕ": "s", "ј": "j", "ԁ": "d", "ӏ": "l",
-        "А": "a", "Е": "e", "І": "i", "О": "o", "С": "c", "Р": "p",
-        "Х": "x", "У": "y", "Ѕ": "s", "Ј": "j", "Ԁ": "d", "Ӏ": "l",
-        "α": "a", "ε": "e", "ι": "i", "ο": "o", "ρ": "p", "χ": "x",
-        "υ": "y", "Α": "a", "Ε": "e", "Ι": "i", "Ο": "o", "Ρ": "p",
-        "Χ": "x", "Υ": "y",
+        "а": "a",
+        "е": "e",
+        "і": "i",
+        "о": "o",
+        "с": "c",
+        "р": "p",
+        "х": "x",
+        "у": "y",
+        "ѕ": "s",
+        "ј": "j",
+        "ԁ": "d",
+        "ӏ": "l",
+        "А": "a",
+        "Е": "e",
+        "І": "i",
+        "О": "o",
+        "С": "c",
+        "Р": "p",
+        "Х": "x",
+        "У": "y",
+        "Ѕ": "s",
+        "Ј": "j",
+        "Ԁ": "d",
+        "Ӏ": "l",
+        "α": "a",
+        "ε": "e",
+        "ι": "i",
+        "ο": "o",
+        "ρ": "p",
+        "χ": "x",
+        "υ": "y",
+        "Α": "a",
+        "Ε": "e",
+        "Ι": "i",
+        "Ο": "o",
+        "Ρ": "p",
+        "Χ": "x",
+        "Υ": "y",
     }
 )
 
@@ -622,9 +650,7 @@ def _decode_payloads(text: str) -> list[str]:
         for match in re.finditer(r"[A-Za-z0-9+/]{8,}={0,2}", text):
             blob = match.group(0)
             try:
-                raw = base64.b64decode(
-                    blob + "=" * (-len(blob) % 4), validate=False
-                )
+                raw = base64.b64decode(blob + "=" * (-len(blob) % 4), validate=False)
                 candidate = raw.decode("utf-8", errors="ignore")
             except (ValueError, UnicodeError):
                 continue
@@ -688,9 +714,12 @@ def _build_detection_variants(text: str) -> list[str]:
     for payload in _decode_payloads(text):
         payload_base = " ".join(
             "".join(
-                ch for ch in unicodedata.normalize("NFKC", payload)
+                ch
+                for ch in unicodedata.normalize("NFKC", payload)
                 if ch not in ZERO_WIDTH_CHARS
-            ).lower().split()
+            )
+            .lower()
+            .split()
         )
         if not payload_base:
             continue
@@ -719,8 +748,7 @@ _COMBINED_COMPACT_INJECTION_RE = re.compile(
 )
 _COMBINED_DEACC_COMPACT_INJECTION_RE = re.compile(
     "|".join(
-        f"(?:{_build_compact_pattern(_fold_pattern(p))})"
-        for p in INJECTION_PATTERNS
+        f"(?:{_build_compact_pattern(_fold_pattern(p))})" for p in INJECTION_PATTERNS
     )
 )
 _COMBINED_DIRECT_ANSWER_RE = re.compile(
@@ -744,9 +772,9 @@ _COMBINED_EXTENDED_HOMEWORK_RE = re.compile(
 _COMBINED_DEACC_EXTENDED_HOMEWORK_RE = re.compile(
     "|".join(f"(?:{_fold_pattern(p)})" for p in EXTENDED_HOMEWORK_PATTERNS)
 )
-_NEGATED_HOMEWORK_PREFIX_DEACC_RE = re.compile(_fold_pattern(
-    _NEGATED_HOMEWORK_PREFIX_RE.pattern
-))
+_NEGATED_HOMEWORK_PREFIX_DEACC_RE = re.compile(
+    _fold_pattern(_NEGATED_HOMEWORK_PREFIX_RE.pattern)
+)
 _MULTI_SPACE_LETTERS_RE = re.compile(r"[^\W\d_]\s{2,}[^\W\d_]")
 _SINGLE_SPACE_BETWEEN_LETTERS_RE = re.compile(
     r"(?<![^\W\d_])([^\W\d_])\s(?![\s])(?=[^\W\d_](?![^\W\d_]))"
