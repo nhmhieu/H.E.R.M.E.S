@@ -19,6 +19,17 @@ import urllib.parse
 DEFAULT_MAX_INPUT_LENGTH = 1000
 REDACTED_SECRET_PLACEHOLDER = "[REDACTED_SECRET]"
 
+# Scan-set flags: which regex family must run on a normalized text unit.
+_STD = 1
+_DEACC = 2
+_COMPACT = 4
+_DEACC_COMPACT = 8
+
+# Gate bitmask: which detection layers are worth running for this input.
+_MASK_INJECTION = 1
+_MASK_POLICY = 2
+_MASK_FULL = _MASK_INJECTION | _MASK_POLICY
+
 # Zero-width and invisible formatting characters often used to bypass filters
 ZERO_WIDTH_CHARS = {
     "\u200b",  # Zero-width space
@@ -51,9 +62,9 @@ INJECTION_PATTERNS = [
         r"(?:instructions|prompts|rules|directions|constraints|guidelines)"
     ),
     (
-        r"disregard\s+(?:all\s+|any\s+|the\s+)?"
-        r"(?:previous|prior|above|earlier|system)\s+"
-        r"(?:instructions|prompts|rules|directions|constraints)"
+        r"disregard\s+(?:all\s+|any\s+|the\s+)?(?:your\s+)?"
+        r"(?:(?:previous|prior|above|earlier|system)\s+)?"
+        r"(?:instructions|prompts|commands|rules|directions|constraints)"
     ),
     (
         r"forget\s+(?:all\s+|everything\s+|any\s+)?"
@@ -141,6 +152,11 @@ INJECTION_PATTERNS = [
         r"(?:api\s*key|secret\s*key|gemini_api_key|environment\s+variables)"
     ),
     (
+        r"(?:reveal|show|print|output|dump|leak|expose|display)\s+"
+        r"(?:me\s+)?(?:your\s+|the\s+)?"
+        r"(?:api\s*key|configuration|config|credentials|secrets?)\b"
+    ),
+    (
         r"(?:tiết\s+lộ|hiển\s+thị|in\s+ra|cho\s+(?:tôi|mình|em)\s+xem"
         r"|xuất\s+ra|lặp\s+lại|đọc\s+ra)\s+(?:toàn\s+bộ\s+|nội\s+dung\s+)?"
         r"(?:system\s*prompt|chỉ\s+dẫn\s+hệ\s+thống|hướng\s+dẫn\s+hệ\s+thống"
@@ -163,6 +179,10 @@ INJECTION_PATTERNS = [
         r"(?:directions|instructions|prompts|rules|context)\b"
     ),
     r"forget\s+everything\s+above",
+    (
+        r"(?:ignore|disregard|override)\s+(?:the\s+)?"
+        r"(?:safety|content|security)\s+(?:policy|policies|rules)\b"
+    ),
     (
         r"(?:do\s+not|don'?t)\s+(?:follow|obey)\s+"
         r"(?:any\s+|the\s+)?(?:earlier|previous|prior|above)?\s*"
@@ -189,10 +209,15 @@ INJECTION_PATTERNS = [
         r"(?:bộ\s+lọc|guardrails?|bảo\s+mật|quy\s+tắc|quy\s+định|"
         r"chính\s+sách|ràng\s+buộc|hướng\s+dẫn|chỉ\s+dẫn)"
     ),
+    (
+        r"(?:cho\s+phép|mở\s+khóa|bỏ\s+giới\s+hạn)\s+"
+        r"(?:nội\s+dung(?:\s+bị\s+cấm)?|đầu\s+ra|ngôn\s+từ)"
+    ),
+    (r"không\s+giới\s+hạn\s+" r"(?:nội\s+dung|đầu\s+ra|ngôn\s+từ)"),
     # 7. Role spoofing / mode switching (extended)
     (
         r"(?:developer|admin|debug|unrestricted|jailbreak|dan|dev)\s+mode\s+"
-        r"(?:enabled|activated|active|on|is\s+on)"
+        r"(?:enabled|activated|active|is\s+on)"
     ),
     (
         r"(?:pretend|imagine|suppose|assume)\s+"
@@ -274,24 +299,28 @@ INJECTION_PATTERNS = [
     r"инструкц\w*[^\n]{0,50}(?:покаж|открой|игнор)",
     r"เพิกเฉย[^\n]{0,70}(?:คำสั่ง|พรอมต์|ระบบ)",
     r"\babaikan\b[^\n]{0,70}(?:instruksi|prompt|sistem)",
+    r"تجاهل[^\n]{0,70}(?:التعليمات|التوجيهات|النظام|الموجه|البرومبت)",
+    r"(?:अनदेखा|उपेक्षा)[^\n]{0,70}(?:निर्देश|प्रॉम्प्ट|सिस्टम)",
+    r"\b(?:yoksay|görmezden\s+gel)\b[^\n]{0,70}(?:talimat|istem|sistem|komut)",
+    r"\bzignoruj\b[^\n]{0,70}(?:instrukcj|prompt|system)",
 ]
 
 # Patterns for demanding raw/direct answers without explanation (Always blocked)
 DIRECT_ANSWER_PATTERNS = [
     (
-        r"chỉ\s+(?:cần\s+)?(?:trả\s+lời\s+|cho\s+|đưa\s+|xin\s+|lấy\s+)*"
+        r"chỉ\s+(?:cần\s+)?(?:trả\s+lời\s+|cho\s+|đưa\s+|xin\s+|lấy\s+|nói\s+|đọc\s+|báo\s+)*"
         r"(?:mình\s+|tôi\s+|em\s+)?đáp\s+án(?:.*?)"
         r"(?:không\s+(?:cần\s+)?(?:phải\s+)?|đừng\s+|khỏi\s+|miễn\s+)giải\s+thích"
     ),
     (
-        r"(?:đưa|cho|trả|xin|lấy)\s+(?:mình\s+|tôi\s+|em\s+)?đáp\s+án\s*"
-        r"(?:cuối\s+cùng\s+|luôn\s+|trực\s+tiếp\s+|ngay\s+|thôi\s+)*"
+        r"(?:đưa|cho|trả|xin|lấy|nói|đọc|báo)\s+(?:mình\s+|tôi\s+|em\s+)?đáp\s+án\s*"
+        r"(?:cuối\s+cùng|luôn|trực\s+tiếp|ngay|thôi)\s*"
         r"(?:,\s*|\s+|-\s*)"
         r"(?:không\s+(?:cần\s+)?(?:phải\s+)?|đừng\s+|khỏi\s+|miễn\s+)giải\s+thích"
     ),
     (
         r"(?:không\s+(?:cần\s+)?(?:phải\s+)?|đừng\s+|khỏi\s+|miễn\s+)giải\s+thích"
-        r"(?:.*?)(?:chỉ\s+(?:cần\s+)?|đưa\s+|cho\s+|xin\s+|lấy\s+)đáp\s+án"
+        r"(?:.*?)(?:chỉ\s+(?:cần\s+)?|đưa\s+|cho\s+|xin\s+|lấy\s+|nói\s+|đọc\s+|báo\s+)đáp\s+án"
     ),
     (
         r"(?:give|provide|tell|send|show)\s+(?:me\s+)?(?:only\s+|just\s+)?"
@@ -311,7 +340,7 @@ DIRECT_ANSWER_PATTERNS = [
         r"(?:the\s+)?(?:final\s+|exact\s+)?(?:answer|solution|code)"
     ),
     # Bare final answer / answer key requests (no explanation wording required)
-    r"\bfinal\s+answer\b",
+    r"\bwhat\s+is\s+(?:the\s+)?final\s+answer\b",
     r"\banswer\s+key\b",
     r"đáp\s+án\s+cuối\s+cùng",
     (
@@ -334,6 +363,8 @@ LEARNING_INTENT_PATTERNS = [
     r"\bphương\s+pháp\b",
     r"\bhướng\s+tiếp\s+cận\b",
     r"\blàm\s+sao\s+để\s+hiểu\b",
+    r"\blàm\s+sao\s+để\s+(?:làm|giải|hoàn\s+thành)\b",
+    r"\bhướng\s+dẫn\s+(?:tôi|mình|em)\s+(?:làm|cách|từng\s+bước)\b",
     r"\btại\s+sao\b",
     r"\bphân\s+tích\s+(?:lỗi|yêu\s+cầu|đề\s+bài)\b",
     r"\bsai\s+ở\s+đâu\b",
@@ -361,7 +392,7 @@ FORBIDDEN_HOMEWORK_PATTERNS = [
         r"(?:homework|assignment|lab|exam|test|project)"
     ),
     (
-        r"write\s+(?:the\s+|my\s+)?"
+        r"write\s+(?:the\s+|my\s+|a\s+|an\s+)?"
         r"(?:full\s+|complete\s+|entire\s+|whole\s+|ready\s+to\s+submit\s+)?"
         r"(?:code|solution|assignment|homework)\s+for\s+me"
     ),
@@ -453,6 +484,10 @@ EXTENDED_HOMEWORK_PATTERNS = [
         r"(?:code|chương\s+trình|lời\s+giải|bài\s+giải)\b"
         r"[^.\n]{0,30}?\b(?:hoàn\s+chỉnh|đầy\s+đủ|full|toàn\s+bộ)\b"
     ),
+    (
+        r"\b(?:cho|xin|đưa|lấy|trả)\s+(?:tôi|mình|em)?\s*"
+        r"đáp\s+án\s+(?:đề\s+thi|bài\s+thi|bài\s+kiểm\s+tra)"
+    ),
 ]
 
 # Layer D Privacy & Secret Protection
@@ -520,15 +555,34 @@ _KNOWN_TOKEN_PREFIX_RE = re.compile(
     r")\b"
 )
 _KEY_VALUE_SECRET_RE = re.compile(
-    r"((?:\bmật\s*khẩu\b|\bmat\s*khau\b|\bpassword\b|\bpasswd\b|\bpwd\b"
-    r"|\bmã\s*pin\b|\bapi[_\-\s]*key\b|\baccess[_\-\s]*token\b"
-    r"|\brefresh[_\-\s]*token\b|\bauth[_\-\s]*token\b"
-    r"|\bclient[_\-\s]*secret\b|\bsecret[_\-\s]*key\b|\bprivate[_\-\s]*key\b"
-    r"|\bsecret\b|\btoken\b)"
+    r"((?:(?<![A-Za-z0-9])"
+    r"(?:mật\s*khẩu|mat\s*khau|password|passwd|pwd"
+    r"|mã\s*pin|pin|api[_\-\s]*key|access[_\-\s]*token"
+    r"|refresh[_\-\s]*token|auth[_\-\s]*token"
+    r"|client[_\-\s]*secret|secret[_\-\s]*key|private[_\-\s]*key"
+    r"|secret|token)\b)"
     r"(?:\s+(?:của\s+)?(?:tôi|mình|em|user|admin|moodle|db|database|hệ\s+thống))?"
     r"\s*(?:[:=]|\blà\b|\bis\b)\s*)"
     r"(['\"]?[^\s,;'\"]+['\"]?)",
     re.IGNORECASE,
+)
+
+# Layer D PII detection (email, Vietnamese phone, payment card, CCCD, address).
+_PII_EMAIL_RE = re.compile(r"\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b")
+_PII_PHONE_RE = re.compile(r"\b(?:\+84|0)(?:3|5|7|8|9)\d{8}\b")
+_PII_CREDIT_CARD_RE = re.compile(r"\b(?:\d[ -]?){12,18}\d\b")
+_PII_CCCD_RE = re.compile(r"\b\d{12}\b")
+_PII_ADDRESS_RE = re.compile(
+    r"\b\d{1,5}\s+[^\n,;]{3,60}?,\s*"
+    r"(?:Quận|Huyện|Phường|Xã|Thị\s+trấn|Thành\s+phố|Tỉnh)\b[^\n,;]{0,40}",
+    re.IGNORECASE,
+)
+_PII_PATTERNS = (
+    _PII_EMAIL_RE,
+    _PII_PHONE_RE,
+    _PII_CREDIT_CARD_RE,
+    _PII_CCCD_RE,
+    _PII_ADDRESS_RE,
 )
 
 _NEGATED_HOMEWORK_PREFIX_RE = re.compile(
@@ -568,6 +622,44 @@ def _strip_diacritics(text: str) -> str:
 def _fold_pattern(pattern: str) -> str:
     """Create a diacritic-insensitive counterpart of a regex pattern."""
     return _strip_diacritics(pattern)
+
+
+# Pre-built lowercase Vietnamese folding table (67 characters). This matches
+# ``_strip_diacritics`` exactly for Vietnamese while avoiding a full NFD pass
+# on every request; characters outside the table fall back to NFD.
+_VI_FOLD_SRC = (
+    "àáảãạăằắẳẵặâầấẩẫậ"
+    "èéẻẽẹêềếểễệ"
+    "ìíỉĩị"
+    "òóỏõọôồốổỗộơờớởỡợ"
+    "ùúủũụưừứửữự"
+    "ỳýỷỹỵ"
+    "đ"
+)
+_VI_FOLD_DST = "a" * 17 + "e" * 11 + "i" * 5 + "o" * 17 + "u" * 11 + "y" * 5 + "d"
+
+if len(_VI_FOLD_SRC) != 67 or len(_VI_FOLD_DST) != 67:  # pragma: no cover
+    raise AssertionError("Vietnamese folding table must contain exactly 67 entries.")
+
+_FOLD_TABLE = str.maketrans(_VI_FOLD_SRC, _VI_FOLD_DST)
+
+
+def _fold_text(text: str) -> str:
+    """
+    Fast diacritic-insensitive folding equivalent to ``_strip_diacritics``.
+
+    ASCII input is returned unchanged. Vietnamese precomposed characters use a
+    pre-built translation table, and any remaining non-ASCII characters fall
+    back to NFD decomposition so accents outside Vietnamese (``über``) behave
+    exactly like the legacy implementation.
+    """
+    if text.isascii():
+        return text
+    folded = text.translate(_FOLD_TABLE).replace("Đ", "D")
+    if folded.isascii():
+        return folded
+    decomposed = unicodedata.normalize("NFD", folded)
+    return "".join(ch for ch in decomposed if unicodedata.category(ch) != "Mn")
 
 
 _LEET_TRANSLATION = str.maketrans("431057", "aeiost")
@@ -696,15 +788,25 @@ def _build_detection_variants(text: str) -> list[str]:
     for seed in tuple(variants):
         variants.add(_strip_diacritics(seed))
 
+    leet: str | None = None
     if re.search(r"[013457]", base):
         leet = _leet_normalize(base)
         variants.add(leet)
         variants.add(_strip_diacritics(leet))
 
+    homoglyph: str | None = None
     if re.search(r"[^\x00-\x7f]", base):
         homoglyph = _homoglyph_normalize(base)
         variants.add(homoglyph)
         variants.add(_strip_diacritics(homoglyph))
+
+    if leet is not None and homoglyph is not None:
+        for combined in (
+            _leet_normalize(homoglyph),
+            _homoglyph_normalize(leet),
+        ):
+            variants.add(combined)
+            variants.add(_strip_diacritics(combined))
 
     if re.search(r"[\\/|]", base):
         slashed = re.sub(r"[\\/|]+", " ", base)
@@ -785,6 +887,533 @@ _COMPACT_SINGLE_LETTERS_RE = re.compile(
 _REPEATED_ALPHA_RE = re.compile(r"([^\W\d_])\1{7,}")
 _REPEATED_ANY_RE = re.compile(r"(.)\1{9,}")
 _TWO_PLUS_ALPHA_WORDS_RE = re.compile(r"[^\W\d_]{2,}")
+_ASCII_CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+_LEET_SIGNAL_RE = re.compile(r"[013457]")
+_NON_LATIN_SCRIPT_RE = re.compile(
+    r"[\u0370-\u052F\u0590-\u06FF\u0900-\u097F\u0E00-\u0E7F"
+    r"\u1100-\u11FF\u3040-\u30FF\u3130-\u318F\u3400-\u4DBF"
+    r"\u4E00-\u9FFF\uAC00-\uD7AF\uF900-\uFAFF]"
+)
+_ENCODING_MARKER_RE = re.compile(r"(?:base64|rot13|hex|%[0-9a-fA-F]{2})")
+_REVERSE_MARKER_RE = re.compile(r"(?:backwards|reverse|ngược|đảo\s+ngược)")
+_PUNCT_LETTER_PAIR_RE = re.compile(r"[^\W\d_][._\-/~*|\\][^\W\d_]")
+_SPACED_PUNCT_SEPARATOR_RE = re.compile(r"[^\W\d_]\s+[._\-/~*|\\]\s+[^\W\d_]")
+
+
+try:  # Python exposes the regex parser under a private but stable name.
+    from re import _constants as _re_constants
+    from re import _parser as _re_parser
+
+    _REGEX_PARSER_AVAILABLE = True
+except ImportError:  # pragma: no cover - fallback for exotic interpreters.
+    _re_constants = None  # type: ignore[assignment]
+    _re_parser = None  # type: ignore[assignment]
+    _REGEX_PARSER_AVAILABLE = False
+
+
+def _is_signal_gated_pattern(pattern: str) -> bool:
+    """
+    Return True for patterns whose only trigger is an obfuscation signal.
+
+    The spaced-letter injection pattern has no mandatory literal run of its
+    own; it can only match when letters are separated by punctuation. The gate
+    therefore stays conservative: these inputs are always forced onto the slow
+    path by ``_has_obfuscation_signal`` instead of being skipped.
+    """
+    return "[.\\-_/~*|\\\\]" in pattern
+
+
+def _literal_anchor_tokens(run: str) -> list[str]:
+    """Split a mandatory literal run into usable anchor tokens."""
+    tokens: list[str] = []
+    for token in re.findall(r"[^\W_]+", run):
+        if token.isascii() and token.isalnum() and len(token) >= 3:
+            tokens.append(token)
+        elif not token.isascii() and len(token) >= 2:
+            tokens.append(token)
+    return tokens
+
+
+def _anchor_score(anchors: set[str]) -> tuple[int, float, int]:
+    """Rank an anchor set by how selective and compact it is."""
+    return (
+        min(len(anchor) for anchor in anchors),
+        sum(len(anchor) for anchor in anchors) / len(anchors),
+        -len(anchors),
+    )
+
+
+def _is_whitespace_ops(nodes: object) -> bool:
+    """Return True when every op in ``nodes`` only consumes whitespace."""
+    if not _REGEX_PARSER_AVAILABLE:  # pragma: no cover
+        return False
+    for op, av in nodes:  # type: ignore[union-attr]
+        if op is _re_constants.CATEGORY:
+            if av is not _re_constants.CATEGORY_SPACE:
+                return False
+            continue
+        if op is _re_constants.LITERAL:
+            if not chr(av).isspace():
+                return False
+            continue
+        if op is _re_constants.IN:
+            for inner_op, inner_av in av:
+                if inner_op is _re_constants.NEGATE:
+                    return False
+                if inner_op is _re_constants.CATEGORY:
+                    if inner_av is not _re_constants.CATEGORY_SPACE:
+                        return False
+                elif inner_op is _re_constants.LITERAL:
+                    if not chr(inner_av).isspace():
+                        return False
+                else:
+                    return False
+            continue
+        return False
+    return True
+
+
+def _phrase_anchors(
+    phrase: list[tuple[str, bool]],
+) -> set[str]:
+    """
+    Expand a token phrase into concrete anchor strings.
+
+    ``phrase`` entries are ``(token, space_required_before)``. Required spaces
+    always become one space (normalized text collapses whitespace); optional
+    spaces produce both a spaced and a concatenated anchor.
+    """
+    if not phrase:
+        return set()
+    tokens = [token for token, _ in phrase]
+    separators = [required for _, required in phrase[1:]]
+    optional_positions = [i for i, required in enumerate(separators) if not required]
+    if len(optional_positions) > 4:  # pragma: no cover - defensive cap.
+        return {token for token, _ in phrase if len(token) >= 3}
+
+    results: set[str] = set()
+    for mask in range(1 << len(optional_positions)):
+        pieces = [tokens[0]]
+        optional_bit = 0
+        for index, required in enumerate(separators, start=1):
+            if required:
+                pieces.append(" ")
+            else:
+                if mask & (1 << optional_bit):
+                    pieces.append(" ")
+                optional_bit += 1
+            pieces.append(tokens[index])
+        results.add("".join(pieces))
+    return results
+
+
+def _analyze_anchor_node(node: object) -> set[str] | None:
+    """
+    Derive a hitting set of literals/phrases from a parsed regex node.
+
+    The returned set has the invariant: every string matched by ``node``
+    contains at least one member of the set. ``None`` means no such guarantee
+    exists (for example, a branch made only of character classes).
+    """
+    if not _REGEX_PARSER_AVAILABLE:  # pragma: no cover
+        return None
+
+    best: set[str] | None = None
+    current: list[str] = []
+    phrase: list[tuple[str, bool]] = []
+    pending_space: bool | None = None
+
+    def consider(candidate: set[str] | None) -> None:
+        nonlocal best
+        if candidate and (
+            best is None or _anchor_score(candidate) > _anchor_score(best)
+        ):
+            best = candidate
+
+    def append_run(run: str) -> None:
+        nonlocal pending_space
+        if not run:
+            return
+        if re.fullmatch(r"[^\W_]+", run):
+            token = run
+            required = pending_space if phrase else False
+            phrase.append((token, bool(required)))
+            pending_space = None
+            return
+        if re.fullmatch(r"[^\W_\s]+(?:\s+[^\W_]+)*", run):
+            for index, token in enumerate(re.findall(r"[^\W_]+", run)):
+                if index == 0:
+                    required = bool(pending_space) if phrase else False
+                else:
+                    required = True
+                phrase.append((token, required))
+            pending_space = None
+            return
+        flush_phrase()
+        tokens = _literal_anchor_tokens(run)
+        if tokens:
+            consider({max(tokens, key=lambda token: (len(token), token))})
+
+    def flush_current() -> None:
+        nonlocal current
+        if current:
+            run = "".join(current)
+            current = []
+            append_run(run)
+
+    def flush_phrase() -> None:
+        nonlocal phrase, pending_space
+        flush_current()
+        if phrase:
+            if len(phrase) == 1:
+                token = phrase[0][0]
+                too_short = len(token) < 3 if token.isascii() else len(token) < 2
+                anchors = set() if too_short else {token}
+            else:
+                anchors = _phrase_anchors(phrase)
+            if anchors:
+                consider(anchors)
+        phrase = []
+        pending_space = None
+
+    for op, av in node:  # type: ignore[union-attr]
+        if op is _re_constants.LITERAL:
+            current.append(chr(av))
+            continue
+        if op is _re_constants.AT:
+            flush_phrase()
+            continue
+        if op is _re_constants.SUBPATTERN:
+            flush_phrase()
+            consider(_analyze_anchor_node(av[3]))
+            continue
+        if op is _re_constants.BRANCH:
+            flush_phrase()
+            parts: list[set[str]] = []
+            for alternative in av[1]:
+                candidate = _analyze_anchor_node(alternative)
+                if candidate is None:
+                    break
+                parts.append(candidate)
+            else:
+                merged: set[str] = set()
+                for part in parts:
+                    merged |= part
+                consider(merged)
+            continue
+        if op in (_re_constants.MAX_REPEAT, _re_constants.MIN_REPEAT):
+            minimum = av[0]
+            if _is_whitespace_ops(av[2]):
+                flush_current()
+                required = minimum >= 1
+                if pending_space is None:
+                    pending_space = required
+                else:
+                    pending_space = pending_space or required
+                continue
+            flush_phrase()
+            candidate = _analyze_anchor_node(av[2])
+            if minimum >= 1:
+                consider(candidate)
+            continue
+        if op is _re_constants.IN and _is_whitespace_ops([(op, av)]):
+            flush_current()
+            if pending_space is None:
+                pending_space = True
+            else:
+                pending_space = True
+            continue
+        flush_phrase()
+    flush_phrase()
+    return best
+
+
+def _derive_family_anchors(
+    patterns: list[str],
+) -> tuple[set[str], bool]:
+    """
+    Derive gate anchors for a pattern family.
+
+    Returns ``(anchors, always_slow)``. ``always_slow`` is set only when a
+    pattern cannot produce a safe anchor and is not covered by an obfuscation
+    signal; in that case the family must run on every input (fail-closed).
+    """
+    anchors: set[str] = set()
+    always_slow = False
+    for pattern in patterns:
+        folded = _fold_pattern(pattern)
+        candidate: set[str] | None = None
+        if _REGEX_PARSER_AVAILABLE:
+            try:
+                candidate = _analyze_anchor_node(_re_parser.parse(folded, 0))
+            except (re.error, ValueError):  # pragma: no cover - defensive.
+                candidate = None
+        if candidate is None:
+            if not _is_signal_gated_pattern(pattern):
+                always_slow = True
+        else:
+            anchors |= candidate
+    return anchors, always_slow
+
+
+_INJECTION_ANCHORS, _INJECTION_ALWAYS_SLOW = _derive_family_anchors(INJECTION_PATTERNS)
+_POLICY_ANCHORS, _POLICY_ALWAYS_SLOW = _derive_family_anchors(
+    list(DIRECT_ANSWER_PATTERNS)
+    + list(FORBIDDEN_HOMEWORK_PATTERNS)
+    + list(EXTENDED_HOMEWORK_PATTERNS)
+)
+
+
+def _anchor_hit(anchors: set[str], folded: str) -> bool:
+    """
+    Return True if any derived anchor occurs in ``folded``.
+
+    Plain substring checks are measurably faster than a large compiled
+    alternation for this workload (tens of microseconds per 1000 characters).
+    """
+    return any(anchor in folded for anchor in anchors)
+
+
+def _has_obfuscation_signal(base: str) -> bool:
+    """
+    Return True when cheap signals indicate a variant-based attack.
+
+    Any hit forces the full detection path, so the gate can never skip a
+    family that might match only after a lossy transformation. The expensive
+    spaced-letter regexes only run when the text actually contains at least two
+    isolated single-letter tokens.
+    """
+    if sum(1 for token in base.split() if len(token) == 1 and token.isalpha()) >= 2:
+        if _COMPACT_SINGLE_LETTERS_RE.search(
+            base
+        ) or _PUNCT_SEPARATED_LETTERS_RE.search(base):
+            return True
+    if _PUNCT_LETTER_PAIR_RE.search(base) or _SPACED_PUNCT_SEPARATOR_RE.search(base):
+        return True
+    if (
+        _LEET_SIGNAL_RE.search(base)
+        or _ENCODING_MARKER_RE.search(base)
+        or _REVERSE_MARKER_RE.search(base)
+        or _NON_LATIN_SCRIPT_RE.search(base)
+    ):
+        return True
+    return False
+
+
+def _gate_mask(base: str, folded: str) -> int:
+    """
+    Choose which detection layers must run for ``base``/``folded``.
+
+    The gate never decides that an input is safe; it only selects a scan path.
+    A missing anchor family is always forced through the full path.
+    """
+    mask = 0
+    if _INJECTION_ALWAYS_SLOW or _anchor_hit(_INJECTION_ANCHORS, folded):
+        mask |= _MASK_INJECTION
+    if _POLICY_ALWAYS_SLOW or _anchor_hit(_POLICY_ANCHORS, folded):
+        mask |= _MASK_POLICY
+    return mask
+
+
+def _build_scan_units(
+    text: str,
+    use_fast_fold: bool = True,
+    include_compact: bool = True,
+) -> dict[str, int]:
+    """
+    Build the deduplicated ``(text, scan flags)`` view of an input.
+
+    This reproduces exactly the string set produced by
+    ``_build_detection_variants`` but stores one entry per unique string and
+    records which regex families were already requested for it.
+
+    ``include_compact`` may be disabled when the injection layer will not run:
+    the compact/compact-folded flags are only consumed by the injection scanner,
+    while the compacted base string itself is already present as a ``_STD`` unit
+    for the policy scanner. This avoids redundant work without changing any
+    decision.
+    """
+    fold = _fold_text if use_fast_fold else _strip_diacritics
+
+    compat = unicodedata.normalize("NFKC", text)
+    no_zw = "".join(ch for ch in compat if ch not in ZERO_WIDTH_CHARS)
+    base = " ".join(no_zw.lower().split())
+
+    texts: set[str] = {base}
+    texts.add(_collapse_spaced_letters(base))
+    texts.add(_COMPACT_SINGLE_LETTERS_RE.sub(r"\1", base))
+
+    for seed in tuple(texts):
+        texts.add(fold(seed))
+
+    leet: str | None = None
+    if re.search(r"[013457]", base):
+        leet = _leet_normalize(base)
+        texts.add(leet)
+        texts.add(fold(leet))
+
+    homoglyph: str | None = None
+    if re.search(r"[^\x00-\x7f]", base):
+        homoglyph = _homoglyph_normalize(base)
+        texts.add(homoglyph)
+        texts.add(fold(homoglyph))
+
+    if leet is not None and homoglyph is not None:
+        for combined in (
+            _leet_normalize(homoglyph),
+            _homoglyph_normalize(leet),
+        ):
+            texts.add(combined)
+            texts.add(fold(combined))
+
+    if re.search(r"[\\/|]", base):
+        slashed = re.sub(r"[\\/|]+", " ", base)
+        texts.add(slashed)
+        texts.add(fold(slashed))
+
+    for payload in _decode_payloads(text):
+        payload_base = " ".join(
+            "".join(
+                ch
+                for ch in unicodedata.normalize("NFKC", payload)
+                if ch not in ZERO_WIDTH_CHARS
+            )
+            .lower()
+            .split()
+        )
+        if not payload_base:
+            continue
+        collapsed = _collapse_spaced_letters(payload_base)
+        texts.add(payload_base)
+        texts.add(fold(payload_base))
+        texts.add(collapsed)
+        texts.add(fold(collapsed))
+
+    if _REVERSE_MARKER_RE.search(base):
+        reversed_full = base[::-1]
+        texts.add(reversed_full)
+        texts.add(fold(reversed_full))
+
+    units: dict[str, int] = {}
+    for unit in texts:
+        if not unit:
+            continue
+        units[unit] = units.get(unit, 0) | _STD
+        folded = fold(unit)
+        if folded:
+            units[folded] = units.get(folded, 0) | _DEACC
+        if not include_compact:
+            continue
+        compact = _COMPACT_SINGLE_LETTERS_RE.sub(r"\1", unit)
+        if compact != unit:
+            units[compact] = units.get(compact, 0) | _COMPACT
+            folded_compact = fold(compact)
+            if folded_compact:
+                units[folded_compact] = units.get(folded_compact, 0) | _DEACC_COMPACT
+    return units
+
+
+def _detect_injection_units(units: dict[str, int]) -> bool:
+    """Scan deduplicated units for prompt injection with early exit."""
+    for unit, flags in units.items():
+        if flags & _STD and _COMBINED_STD_INJECTION_RE.search(unit):
+            return True
+        if flags & _DEACC and _COMBINED_DEACC_INJECTION_RE.search(unit):
+            return True
+        if flags & _COMPACT and _COMBINED_COMPACT_INJECTION_RE.search(unit):
+            return True
+        if flags & _DEACC_COMPACT and _COMBINED_DEACC_COMPACT_INJECTION_RE.search(unit):
+            return True
+    return False
+
+
+def _detect_direct_answer_units(units: dict[str, int]) -> bool:
+    """Scan deduplicated units for bare-answer requests (STD/DEACC only)."""
+    for unit, flags in units.items():
+        if flags & _STD and _COMBINED_DIRECT_ANSWER_RE.search(unit):
+            return True
+        if flags & _DEACC and _COMBINED_DEACC_DIRECT_ANSWER_RE.search(unit):
+            return True
+    return False
+
+
+def _detect_homework_units(units: dict[str, int], has_learning_intent: bool) -> bool:
+    """Scan deduplicated units for full-homework requests (STD/DEACC only)."""
+    for unit, flags in units.items():
+        if flags & _STD and _has_affirmative_forbidden_homework(unit):
+            return True
+        if has_learning_intent:
+            continue
+        if flags & _DEACC and _has_affirmative_forbidden_homework(
+            unit,
+            _COMBINED_DEACC_FORBIDDEN_HOMEWORK_RE,
+            _NEGATED_HOMEWORK_PREFIX_DEACC_RE,
+        ):
+            return True
+        if flags & _STD and _has_affirmative_forbidden_homework(
+            unit,
+            _COMBINED_EXTENDED_HOMEWORK_RE,
+            _NEGATED_HOMEWORK_PREFIX_RE,
+        ):
+            return True
+        if flags & _DEACC and _has_affirmative_forbidden_homework(
+            unit,
+            _COMBINED_DEACC_EXTENDED_HOMEWORK_RE,
+            _NEGATED_HOMEWORK_PREFIX_DEACC_RE,
+        ):
+            return True
+    return False
+
+
+_SECRET_MARKERS = (
+    # Private keys, bearer tokens and JWTs.
+    "-----begin",
+    "eyj",
+    "bearer",
+    # Known token prefixes (character classes expanded to concrete letters).
+    "aiza",
+    "sk-",
+    "ghp_",
+    "gho_",
+    "ghu_",
+    "ghs_",
+    "ghr_",
+    "github_pat_",
+    "xox",
+    "akia",
+    # Key/value labels, including unaccented Vietnamese variants.
+    "password",
+    "passwd",
+    "pwd",
+    "mật",
+    "mat",
+    "pin",
+    "api",
+    "access",
+    "refresh",
+    "auth",
+    "client",
+    "private",
+    "secret",
+    "token",
+)
+
+
+def _needs_redaction(text: str) -> bool:
+    """
+    Cheap prefilter proving that no secret regex can match ``text``.
+
+    Markers are derived from the redaction patterns themselves. URL credentials
+    additionally require both ``://`` and ``@`` to be present. PII patterns are
+    evaluated directly because they have no cheap single-token marker.
+    """
+    lowered = text.lower()
+    if any(marker in lowered for marker in _SECRET_MARKERS):
+        return True
+    if "://" in lowered and "@" in lowered:
+        return True
+    return any(pattern.search(text) for pattern in _PII_PATTERNS)
+
 
 _CREDENTIAL_LABEL_WORDS = {
     "password",
@@ -847,6 +1476,24 @@ def _get_max_input_length(override_max_length: int | None = None) -> int:
         return val if val > 0 else DEFAULT_MAX_INPUT_LENGTH
     except (ValueError, TypeError):
         return DEFAULT_MAX_INPUT_LENGTH
+
+
+def _env_flag(name: str, default: bool = True) -> bool:
+    """Read a boolean environment flag, accepting common false spellings."""
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() not in {"0", "false", "no", "off", "disabled"}
+
+
+def _optimized_enabled() -> bool:
+    """Whether the low-latency pipeline is active (rollback: set flag to 0)."""
+    return _env_flag("HERMES_GUARDRAIL_OPTIMIZED", True)
+
+
+def _option_enabled(name: str) -> bool:
+    """Return a per-optimization flag; it only applies when optimized mode is on."""
+    return _optimized_enabled() and _env_flag(name, True)
 
 
 def _collapse_spaced_letters(text: str) -> str:
@@ -919,6 +1566,36 @@ def _has_abnormal_control_chars(text: str) -> bool:
     return False
 
 
+def _has_hidden_or_control_chars_fast(text: str) -> bool:
+    """
+    Single-pass equivalent of the zero-width + control-character check.
+
+    ASCII input cannot contain zero-width characters or ``Cf`` codepoints, so a
+    compiled control regex is sufficient. Non-ASCII input memoizes
+    ``unicodedata.category`` per character within the call, keeping the legacy
+    semantics for NBSP, surrogates and private-use characters.
+    """
+    if text.isascii():
+        return _ASCII_CONTROL_RE.search(text) is not None
+
+    categories: dict[str, str] = {}
+    for ch in text:
+        if ch in ZERO_WIDTH_CHARS:
+            return True
+        if ch in ("\t", "\n", "\r"):
+            continue
+        code = ord(ch)
+        if code < 32 or code == 127 or (0x80 <= code <= 0x9F):
+            return True
+        category = categories.get(ch)
+        if category is None:
+            category = unicodedata.category(ch)
+            categories[ch] = category
+        if category == "Cf":
+            return True
+    return False
+
+
 def _is_garbage_input(stripped: str) -> bool:
     """
     Detect punctuation-only or meaningless repetitive noise while avoiding
@@ -932,8 +1609,9 @@ def _is_garbage_input(stripped: str) -> bool:
     if _REPEATED_ALPHA_RE.search(no_space):
         return True
 
-    words = _TWO_PLUS_ALPHA_WORDS_RE.findall(stripped)
-    if not words and _REPEATED_ANY_RE.search(no_space):
+    if _TWO_PLUS_ALPHA_WORDS_RE.search(stripped) is None and _REPEATED_ANY_RE.search(
+        no_space
+    ):
         return True
 
     tokens = stripped.split()
@@ -1056,16 +1734,19 @@ def redact_sensitive_info(text: str) -> str:
         prefix = match.group(1)
         raw_val = match.group(2)
         stripped_val = raw_val.strip("'\"")
+        normalized_val = stripped_val.lower().strip("?!.,;:")
         if (
             not stripped_val
             or len(stripped_val) < 3
-            or stripped_val.lower() in _SECRET_CONVERSATIONAL_STOPWORDS
+            or normalized_val in _SECRET_CONVERSATIONAL_STOPWORDS
             or stripped_val == REDACTED_SECRET_PLACEHOLDER
         ):
             return match.group(0)
         return f"{prefix}{REDACTED_SECRET_PLACEHOLDER}"
 
     redacted = _KEY_VALUE_SECRET_RE.sub(_replace_kv_secret, redacted)
+    for pii_pattern in _PII_PATTERNS:
+        redacted = pii_pattern.sub(REDACTED_SECRET_PLACEHOLDER, redacted)
     return redacted
 
 
@@ -1074,15 +1755,15 @@ def _has_meaningful_query_after_redaction(redacted_text: str) -> bool:
     Verify that after redacting secrets, the remaining text still contains a
     meaningful question or statement rather than only secret placeholders/labels.
     """
-    without_placeholders = redacted_text.replace(REDACTED_SECRET_PLACEHOLDER, " ")
     without_urls = re.sub(
         r"\b[a-zA-Z][a-zA-Z0-9+.\-]*://[^\s]+",
         " ",
-        without_placeholders,
+        redacted_text,
     )
+    without_placeholders = without_urls.replace(REDACTED_SECRET_PLACEHOLDER, " ")
     word_tokens = [
         tok.lower()
-        for tok in re.findall(r"[^\W\d_]+", without_urls)
+        for tok in re.findall(r"[^\W\d_]+", without_placeholders)
         if tok.lower() not in _CREDENTIAL_LABEL_WORDS
     ]
     return len(word_tokens) >= 2
@@ -1128,9 +1809,22 @@ def validate_and_clean(
             category="empty_input",
         )
 
+    optimized = _optimized_enabled()
+    use_micro = optimized and _option_enabled("HERMES_GUARDRAIL_MICRO")
+    use_scan_set = optimized and _option_enabled("HERMES_GUARDRAIL_SCAN_SET")
+    use_gate = optimized and _option_enabled("HERMES_GUARDRAIL_GATE")
+    use_redact_prefilter = optimized and _option_enabled(
+        "HERMES_GUARDRAIL_REDACT_PREFILTER"
+    )
+
     # Layer A3: Invisible/zero-width characters or abnormal control characters
-    has_zero_width = any(ch in ZERO_WIDTH_CHARS for ch in text)
-    if has_zero_width or _has_abnormal_control_chars(text):
+    if use_micro:
+        has_hidden_chars = _has_hidden_or_control_chars_fast(text)
+    else:
+        has_hidden_chars = any(ch in ZERO_WIDTH_CHARS for ch in text) or (
+            _has_abnormal_control_chars(text)
+        )
+    if has_hidden_chars:
         return GuardrailResult(
             allowed=False,
             cleaned_text="",
@@ -1150,13 +1844,38 @@ def validate_and_clean(
             category="garbage_input",
         )
 
-    # Compute normalized detection views once (includes deobfuscation variants)
     compat_lower = unicodedata.normalize("NFKC", stripped).lower()
     plain_lower = " ".join(compat_lower.split())
-    variants = _build_detection_variants(stripped)
+
+    mask = _MASK_FULL
+    folded = ""
+    if optimized:
+        folded = _fold_text(plain_lower)
+        if _has_obfuscation_signal(plain_lower):
+            mask = _MASK_FULL
+        elif use_gate:
+            mask = _gate_mask(plain_lower, folded)
+
+    units: dict[str, int] | None = None
+    if optimized and use_scan_set and mask:
+        units = _build_scan_units(
+            stripped,
+            use_fast_fold=use_micro,
+            include_compact=bool(mask & _MASK_INJECTION),
+        )
+
+    variants: list[str] | None = None
+    if (not optimized or not use_scan_set) and (not optimized or mask):
+        variants = _build_detection_variants(stripped)
 
     # Layer B: Prompt Injection & Obfuscation detection
-    if _detect_injection(variants):
+    injection_hit = False
+    if mask & _MASK_INJECTION:
+        if units is not None:
+            injection_hit = _detect_injection_units(units)
+        else:
+            injection_hit = _detect_injection(variants or [])
+    if injection_hit:
         return GuardrailResult(
             allowed=False,
             cleaned_text="",
@@ -1165,7 +1884,13 @@ def validate_and_clean(
         )
 
     # Layer C: Academic Policy Enforcement (Non-goals R1)
-    if _detect_direct_answer(variants):
+    direct_answer_hit = False
+    if mask & _MASK_POLICY:
+        if units is not None:
+            direct_answer_hit = _detect_direct_answer_units(units)
+        else:
+            direct_answer_hit = _detect_direct_answer(variants or [])
+    if direct_answer_hit:
         return GuardrailResult(
             allowed=False,
             cleaned_text="",
@@ -1176,9 +1901,14 @@ def validate_and_clean(
             category="homework_policy_violation",
         )
 
-    has_learning_intent = bool(_COMBINED_LEARNING_INTENT_RE.search(plain_lower))
-
-    if _detect_homework(variants, has_learning_intent):
+    homework_hit = False
+    if mask & _MASK_POLICY:
+        has_learning_intent = bool(_COMBINED_LEARNING_INTENT_RE.search(plain_lower))
+        if units is not None:
+            homework_hit = _detect_homework_units(units, has_learning_intent)
+        else:
+            homework_hit = _detect_homework(variants or [], has_learning_intent)
+    if homework_hit:
         return GuardrailResult(
             allowed=False,
             cleaned_text="",
@@ -1189,7 +1919,10 @@ def validate_and_clean(
         )
 
     # Layer D: Secret Redaction & Safe Content Normalization
-    redacted_raw = redact_sensitive_info(stripped)
+    if use_redact_prefilter and not _needs_redaction(stripped):
+        redacted_raw = stripped
+    else:
+        redacted_raw = redact_sensitive_info(stripped)
     cleaned_normalized = " ".join(redacted_raw.split())
 
     if REDACTED_SECRET_PLACEHOLDER in cleaned_normalized:
