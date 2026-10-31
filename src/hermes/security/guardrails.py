@@ -10,10 +10,17 @@ from __future__ import annotations
 
 import base64
 import codecs
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
+import json
 import os
 import re
+import socket
+import threading
+import time
+from types import SimpleNamespace
+from typing import Any, Iterator
 import unicodedata
+import urllib.error
 import urllib.parse
 
 DEFAULT_MAX_INPUT_LENGTH = 1000
@@ -1988,3 +1995,710 @@ def sanitize_input(text: str) -> tuple[bool, str]:
     if result.allowed:
         return True, result.cleaned_text
     return False, ""
+
+
+# ==============================================================================
+# SAFE AI GATEWAY & FAIL-CLOSED MOCK FALLBACK (ADDITIVE EXTENSION)
+# ==============================================================================
+
+SAFE_FALLBACK_TEXT = (
+    "[MOCK][SAFE_FALLBACK] Hệ thống tạm thời không kết nối được dịch vụ AI. "
+    "Vui lòng thử lại sau. Câu trả lời này không phải nội dung từ Gemini."
+)
+SAFE_BLOCKED_TEXT = "[BLOCKED] Yêu cầu không hợp lệ hoặc vi phạm chính sách an toàn."
+FALLBACK_MODEL_NAME = "mock-safe-fallback-v1"
+MAX_AI_OUTPUT_LENGTH = 65_536
+MAX_ERROR_REASON_LENGTH = 200
+
+_ERROR_SECRET_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
+    (re.compile(r"AIza[0-9A-Za-z_\-]{12,}"), "[REDACTED_API_KEY]"),
+    (
+        re.compile(
+            r"(?i)\b(api[_-]?key|key|token|secret|password|access_token|sig)"
+            r"=([^&\s'\"<>]+)"
+        ),
+        r"\1=[REDACTED]",
+    ),
+    (
+        re.compile(r"(?i)\bBearer\s+[A-Za-z0-9\-._~+/]+=*"),
+        "Bearer [REDACTED_TOKEN]",
+    ),
+    (re.compile(r"\bsk-[A-Za-z0-9\-_]{12,}\b"), "[REDACTED_SECRET_KEY]"),
+)
+
+
+class EmptyAIResponseError(ValueError):
+    """Raised internally when the AI provider returns an empty response."""
+
+
+@dataclass(frozen=True)
+class SafeAIResult:
+    """Immutable, fail-closed result returned by the safe AI gateway."""
+
+    text: str
+    allowed: bool
+    is_mock: bool
+    degraded: bool
+    mode: str
+    model: str
+    error_category: str = ""
+    reason: str = ""
+
+    @property
+    def ok(self) -> bool:
+        """True only when generation succeeded without degradation."""
+        return self.allowed and not self.degraded
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize the result for the orchestrator or CLI."""
+        return asdict(self)
+
+
+class MockClient:
+    """
+    Deterministic offline fallback client.
+
+    This client never performs network I/O, never reads environment secrets,
+    and never echoes the user prompt back to the caller.
+    """
+
+    def __init__(self, model: str = FALLBACK_MODEL_NAME) -> None:
+        self.model = model or FALLBACK_MODEL_NAME
+
+    def generate(
+        self,
+        prompt: str = "",
+        system_instruction: str | None = None,
+    ) -> SimpleNamespace:
+        """Return a fixed safe fallback response without using ``prompt``."""
+        _ = (prompt, system_instruction)
+        return SimpleNamespace(
+            text=SAFE_FALLBACK_TEXT,
+            mode="mock",
+            model=self.model,
+            is_mock=True,
+        )
+
+
+def _iter_exception_chain(
+    exc: BaseException | None,
+) -> Iterator[BaseException]:
+    """Traverse ``__cause__``/``__context__`` so wrapped causes are inspected."""
+    seen: set[int] = set()
+    current = exc
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        yield current
+        next_exc = current.__cause__ or current.__context__
+        if next_exc is None:
+            for attr in ("original_error", "inner_exception", "error"):
+                candidate = getattr(current, attr, None)
+                if isinstance(candidate, BaseException):
+                    next_exc = candidate
+                    break
+        current = next_exc
+
+
+def classify_ai_error(exc: BaseException) -> str:
+    """
+    Classify direct or wrapped AI exceptions into stable error categories.
+
+    ``HermesAIClient`` wraps network/HTTP/SDK failures in ``AIClientError``, so
+    the classification inspects the full causal chain as well as the message.
+    """
+    chain = list(_iter_exception_chain(exc))
+    combined_msg = " | ".join(str(item).lower() for item in chain if str(item))
+
+    for item in chain:
+        cls_name = type(item).__name__
+        module_name = type(item).__module__.lower()
+
+        if isinstance(item, EmptyAIResponseError) or cls_name in (
+            "EmptyAIResponseError",
+            "EmptyResponseError",
+        ):
+            return "empty_response"
+
+        if cls_name == "AIConfigError":
+            return "config_error"
+
+        if isinstance(item, ImportError):
+            return "dependency_error"
+
+        status_code = getattr(item, "code", None)
+        if status_code is None:
+            status_code = getattr(item, "status_code", None)
+
+        if isinstance(item, urllib.error.HTTPError) or isinstance(status_code, int):
+            if status_code in (401, 403):
+                return "auth_error"
+            if status_code == 429:
+                return "rate_limited"
+            if isinstance(status_code, int) and 500 <= status_code <= 599:
+                return "server_error"
+            if isinstance(status_code, int) and 400 <= status_code <= 499:
+                return "invalid_response"
+
+        if isinstance(item, (TimeoutError, socket.timeout)):
+            return "timeout"
+
+        if isinstance(item, urllib.error.URLError):
+            reason_obj = getattr(item, "reason", None)
+            if isinstance(reason_obj, (TimeoutError, socket.timeout)):
+                return "timeout"
+            item_msg = str(item).lower()
+            if "timed out" in item_msg or "timeout" in item_msg:
+                return "timeout"
+            return "network_error"
+
+        if isinstance(item, (socket.gaierror, ConnectionError, OSError)):
+            item_msg = str(item).lower()
+            if "timed out" in item_msg or "timeout" in item_msg:
+                return "timeout"
+            return "network_error"
+
+        if isinstance(item, json.JSONDecodeError):
+            return "invalid_response"
+
+        if isinstance(item, ValueError):
+            return "invalid_response"
+
+        if "genai" in module_name or "google" in module_name:
+            return "sdk_error"
+
+    if any(
+        kw in combined_msg
+        for kw in (
+            "empty response",
+            "empty_response",
+            "returned an empty",
+            "output empty",
+            "empty text candidate",
+        )
+    ):
+        return "empty_response"
+
+    if any(
+        kw in combined_msg
+        for kw in (
+            "aiconfigerror",
+            "missing api key",
+            "api key is required",
+            "invalid mode",
+            "not configured",
+            "gemini_api_key",
+            "placeholder",
+        )
+    ):
+        return "config_error"
+
+    if any(
+        kw in combined_msg
+        for kw in (
+            "no module named",
+            "importerror",
+            "cannot import",
+            "dependency",
+        )
+    ):
+        return "dependency_error"
+
+    if any(kw in combined_msg for kw in ("timed out", "timeout", "deadline exceeded")):
+        return "timeout"
+
+    if any(
+        kw in combined_msg
+        for kw in (
+            "http 401",
+            "http 403",
+            "status 401",
+            "status 403",
+            "unauthorized",
+            "forbidden",
+            "invalid api key",
+            "permission denied",
+        )
+    ):
+        return "auth_error"
+
+    if any(
+        kw in combined_msg
+        for kw in (
+            "http 429",
+            "status 429",
+            "rate limit",
+            "rate_limit",
+            "quota",
+            "too many requests",
+            "resource_exhausted",
+            "resource exhausted",
+        )
+    ):
+        return "rate_limited"
+
+    if any(
+        kw in combined_msg
+        for kw in (
+            "http 500",
+            "http 502",
+            "http 503",
+            "http 504",
+            "server error",
+            "internal server error",
+            "bad gateway",
+            "service unavailable",
+        )
+    ):
+        return "server_error"
+
+    if any(
+        kw in combined_msg
+        for kw in (
+            "jsondecodeerror",
+            "invalid json",
+            "malformed json",
+            "expecting value",
+            "invalid_response",
+            "invalid response",
+            "decode",
+        )
+    ):
+        return "invalid_response"
+
+    if any(
+        kw in combined_msg
+        for kw in (
+            "urlerror",
+            "gaierror",
+            "name or service not known",
+            "temporary failure in name resolution",
+            "connection refused",
+            "connection reset",
+            "network is unreachable",
+            "network error",
+            "failed to establish a new connection",
+        )
+    ):
+        return "network_error"
+
+    if re.search(r"\bhttp\s+4\d{2}\b", combined_msg):
+        return "invalid_response"
+
+    for item in chain:
+        if type(item).__name__ == "AIClientError":
+            return "sdk_error"
+        if isinstance(item, ValueError):
+            return "invalid_response"
+        if isinstance(item, RuntimeError):
+            return "sdk_error"
+
+    return "unknown_error"
+
+
+def _redact_ai_error(message: str) -> str:
+    """Redact secrets from error text and cap its length safely."""
+    if not isinstance(message, str) or not message.strip():
+        return "AI service error."
+
+    cleaned = message[:4096]
+    try:
+        cleaned = redact_sensitive_info(cleaned)
+    except Exception:  # pragma: no cover - redaction must never break fallback.
+        pass
+
+    for pattern, replacement in _ERROR_SECRET_PATTERNS:
+        cleaned = pattern.sub(replacement, cleaned)
+
+    cleaned = "".join(
+        " " if (ord(ch) < 32 or ord(ch) == 127) else ch
+        for ch in cleaned
+        if ch not in ZERO_WIDTH_CHARS
+    )
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+
+    if len(cleaned) > MAX_ERROR_REASON_LENGTH:
+        cleaned = cleaned[: MAX_ERROR_REASON_LENGTH - 3].rstrip() + "..."
+
+    return cleaned or "AI service error."
+
+
+def sanitize_ai_output(text: str) -> str:
+    """
+    Sanitize untrusted AI output while preserving Markdown formatting.
+
+    Line breaks and tabs are preserved intentionally. The input is bounded
+    before running redaction regexes to avoid excessive CPU work on huge output.
+    """
+    if not isinstance(text, str):
+        return ""
+
+    bounded = text[:MAX_AI_OUTPUT_LENGTH]
+    filtered_chars: list[str] = []
+    for ch in bounded:
+        if ch in ZERO_WIDTH_CHARS:
+            continue
+        code = ord(ch)
+        if 0 <= code < 32 and ch not in ("\n", "\r", "\t"):
+            continue
+        if code == 127 or 0x80 <= code <= 0x9F:
+            continue
+        filtered_chars.append(ch)
+
+    cleaned = "".join(filtered_chars)
+    try:
+        cleaned = redact_sensitive_info(cleaned)
+    except Exception:  # pragma: no cover - output sanitization must not fail.
+        pass
+
+    for pattern, replacement in _ERROR_SECRET_PATTERNS:
+        cleaned = pattern.sub(replacement, cleaned)
+
+    return cleaned.strip()
+
+
+class _CircuitBreaker:
+    """Small thread-safe circuit breaker guarding against repeated timeouts."""
+
+    def __init__(
+        self,
+        failure_threshold: int = 3,
+        cooldown_seconds: float = 30.0,
+    ) -> None:
+        self.failure_threshold = max(1, int(failure_threshold))
+        self.cooldown_seconds = max(0.1, float(cooldown_seconds))
+        self._lock = threading.Lock()
+        self._failure_count = 0
+        self._opened_until = 0.0
+        self._last_category = "circuit_open"
+        self._last_reason = "AI circuit breaker is open due to recent failures."
+
+    @staticmethod
+    def is_enabled() -> bool:
+        """Return whether the breaker is enabled by environment configuration."""
+        raw = os.getenv("HERMES_AI_CIRCUIT_BREAKER", "1")
+        return raw.strip().lower() not in {"0", "false", "no", "off"}
+
+    def allow_request(self) -> tuple[bool, str, str]:
+        """Return ``(allowed, category, reason)`` for the next request."""
+        if not self.is_enabled():
+            return True, "", ""
+        now = time.monotonic()
+        with self._lock:
+            if self._opened_until > now:
+                return False, self._last_category, self._last_reason
+            return True, "", ""
+
+    def record_success(self) -> None:
+        """Reset failure counters after a successful call."""
+        with self._lock:
+            self._failure_count = 0
+            self._opened_until = 0.0
+
+    def record_failure(self, category: str, reason: str) -> None:
+        """Record a failure and open the circuit at the configured threshold."""
+        if not self.is_enabled():
+            return
+        now = time.monotonic()
+        with self._lock:
+            self._failure_count += 1
+            self._last_category = category or "unknown_error"
+            self._last_reason = reason or "AI service temporarily unavailable."
+            if self._failure_count >= self.failure_threshold:
+                self._opened_until = now + self.cooldown_seconds
+
+    def reset(self) -> None:
+        """Reset the breaker to its initial closed state."""
+        with self._lock:
+            self._failure_count = 0
+            self._opened_until = 0.0
+            self._last_category = "circuit_open"
+            self._last_reason = "AI circuit breaker is open due to recent failures."
+
+
+_GLOBAL_AI_CIRCUIT_BREAKER = _CircuitBreaker()
+
+
+def reset_ai_circuit_breaker() -> None:
+    """Reset the global AI circuit breaker (used by tests)."""
+    _GLOBAL_AI_CIRCUIT_BREAKER.reset()
+
+
+class SafeAIGateway:
+    """
+    Fail-closed AI gateway wrapping HermesAIClient with MockClient fallback.
+
+    Any operational, network, SDK, configuration, or response-shape failure is
+    converted into a safe degraded result; exceptions never reach the caller.
+    """
+
+    def __init__(
+        self,
+        client: Any | None = None,
+        fallback_client: Any | None = None,
+        *,
+        mode: str | None = None,
+        api_key: str | None = None,
+        model: str | None = None,
+        timeout: float | None = None,
+        use_circuit_breaker: bool | None = None,
+    ) -> None:
+        self._injected_client = client
+        self.fallback_client = (
+            fallback_client if fallback_client is not None else MockClient()
+        )
+        self._mode = mode
+        self._api_key = api_key
+        self._model = model
+        self._timeout = timeout
+        if use_circuit_breaker is None:
+            self._use_circuit_breaker = client is None
+        else:
+            self._use_circuit_breaker = bool(use_circuit_breaker)
+
+    def _resolve_client(self) -> Any:
+        """Resolve an injected client or lazily import HermesAIClient."""
+        if self._injected_client is not None:
+            return self._injected_client
+
+        from hermes.ai.client import HermesAIClient
+
+        kwargs: dict[str, Any] = {}
+        if self._mode is not None:
+            kwargs["mode"] = self._mode
+        if self._api_key is not None:
+            kwargs["api_key"] = self._api_key
+        if self._model is not None:
+            kwargs["model"] = self._model
+        if self._timeout is not None:
+            kwargs["timeout"] = self._timeout
+        return HermesAIClient(**kwargs)
+
+    @staticmethod
+    def _blocked_result(
+        reason: str,
+        category: str = "input_blocked",
+    ) -> SafeAIResult:
+        """Build a fail-closed result for rejected input."""
+        return SafeAIResult(
+            text="",
+            allowed=False,
+            is_mock=False,
+            degraded=False,
+            mode="blocked",
+            model="guardrails",
+            error_category=category or "input_blocked",
+            reason=(
+                _redact_ai_error(reason)
+                if reason
+                else "Input blocked by security guardrails."
+            ),
+        )
+
+    def _fallback(
+        self,
+        exc: BaseException,
+        prompt: str = "",
+        *,
+        override_category: str | None = None,
+        override_reason: str | None = None,
+    ) -> SafeAIResult:
+        """Convert any failure into a safe degraded MockClient result."""
+        _ = prompt  # Prompt is intentionally never echoed by the fallback.
+        category = override_category or classify_ai_error(exc)
+        reason = override_reason or _redact_ai_error(str(exc))
+
+        if self._use_circuit_breaker and override_category is None:
+            _GLOBAL_AI_CIRCUIT_BREAKER.record_failure(category, reason)
+
+        try:
+            mock_resp = self.fallback_client.generate("")
+            fallback_text = getattr(mock_resp, "text", SAFE_FALLBACK_TEXT)
+            if not isinstance(fallback_text, str) or not fallback_text.strip():
+                fallback_text = SAFE_FALLBACK_TEXT
+            fallback_model = (
+                getattr(mock_resp, "model", FALLBACK_MODEL_NAME) or FALLBACK_MODEL_NAME
+            )
+        except Exception:  # pragma: no cover - MockClient is deterministic.
+            fallback_text = SAFE_FALLBACK_TEXT
+            fallback_model = FALLBACK_MODEL_NAME
+
+        return SafeAIResult(
+            text=fallback_text,
+            allowed=False,
+            is_mock=True,
+            degraded=True,
+            mode="mock",
+            model=str(fallback_model),
+            error_category=category,
+            reason=reason,
+        )
+
+    def generate(
+        self,
+        prompt: str,
+        system_instruction: str | None = None,
+    ) -> SafeAIResult:
+        """Generate a response with fail-closed fallback on every failure."""
+        try:
+            guard = validate_and_clean(prompt)
+        except Exception as exc:
+            return self._blocked_result(f"Input validation failed: {exc}")
+
+        if not getattr(guard, "allowed", False):
+            return self._blocked_result(
+                getattr(guard, "reason", "Input blocked by guardrails."),
+                getattr(guard, "category", "") or "input_blocked",
+            )
+
+        cleaned_prompt = getattr(guard, "cleaned_text", "")
+        if not isinstance(cleaned_prompt, str) or not cleaned_prompt.strip():
+            return self._blocked_result("Input is empty after sanitization.")
+
+        safe_system_instruction: str | None = None
+        if system_instruction is not None:
+            if not isinstance(system_instruction, str):
+                return self._fallback(
+                    ValueError("Invalid system_instruction type."),
+                    override_category="config_error",
+                    override_reason=(
+                        "system_instruction must be a string when provided."
+                    ),
+                )
+            safe_system_instruction = sanitize_ai_output(system_instruction)
+
+        if self._use_circuit_breaker:
+            allowed_call, cb_category, cb_reason = (
+                _GLOBAL_AI_CIRCUIT_BREAKER.allow_request()
+            )
+            if not allowed_call:
+                return self._fallback(
+                    RuntimeError(cb_reason),
+                    override_category=cb_category,
+                    override_reason=cb_reason,
+                )
+
+        try:
+            client = self._resolve_client()
+        except Exception as exc:
+            return self._fallback(exc)
+
+        try:
+            if safe_system_instruction is not None:
+                response = client.generate(
+                    cleaned_prompt,
+                    system_instruction=safe_system_instruction,
+                )
+            else:
+                response = client.generate(cleaned_prompt)
+
+            raw_text = getattr(response, "text", "")
+            if not isinstance(raw_text, str) or not raw_text.strip():
+                raise EmptyAIResponseError("AI service returned an empty response.")
+
+            safe_text = sanitize_ai_output(raw_text)
+            if not safe_text:
+                raise EmptyAIResponseError(
+                    "AI output became empty after output sanitization."
+                )
+
+            resp_mode = (
+                str(getattr(response, "mode", self._mode or "gemini") or "gemini")
+                .strip()
+                .lower()
+            )
+            resp_is_mock = bool(getattr(response, "is_mock", resp_mode == "mock"))
+            resp_model = str(
+                getattr(response, "model", self._model or "unknown") or "unknown"
+            )
+
+            if self._use_circuit_breaker:
+                _GLOBAL_AI_CIRCUIT_BREAKER.record_success()
+
+            return SafeAIResult(
+                text=safe_text,
+                allowed=True,
+                is_mock=resp_is_mock,
+                degraded=False,
+                mode=resp_mode,
+                model=resp_model,
+                error_category="",
+                reason="",
+            )
+        except Exception as exc:
+            return self._fallback(exc)
+
+    def generate_text(
+        self,
+        prompt: str,
+        system_instruction: str | None = None,
+    ) -> str:
+        """
+        Return display-safe text for CLI/UI.
+
+        Automated orchestration should call ``generate()`` and inspect
+        ``allowed``/``degraded`` instead of relying on the raw text alone.
+        """
+        result = self.generate(
+            prompt,
+            system_instruction=system_instruction,
+        )
+        if result.mode == "blocked":
+            return SAFE_BLOCKED_TEXT
+        return result.text
+
+
+def safe_generate(
+    prompt: str,
+    *,
+    mode: str | None = None,
+    api_key: str | None = None,
+    model: str | None = None,
+    timeout: float | None = None,
+    system_instruction: str | None = None,
+    client: Any | None = None,
+    fallback_client: Any | None = None,
+    use_circuit_breaker: bool | None = None,
+) -> SafeAIResult:
+    """Module-level entrypoint for fail-closed generation with fallback."""
+    gateway = SafeAIGateway(
+        client=client,
+        fallback_client=fallback_client,
+        mode=mode,
+        api_key=api_key,
+        model=model,
+        timeout=timeout,
+        use_circuit_breaker=use_circuit_breaker,
+    )
+    return gateway.generate(
+        prompt,
+        system_instruction=system_instruction,
+    )
+
+
+def safe_generate_text(
+    prompt: str,
+    **kwargs: Any,
+) -> str:
+    """Return display-safe generated text; blocked input returns a fixed notice."""
+    gateway = SafeAIGateway(
+        client=kwargs.pop("client", None),
+        fallback_client=kwargs.pop("fallback_client", None),
+        mode=kwargs.pop("mode", None),
+        api_key=kwargs.pop("api_key", None),
+        model=kwargs.pop("model", None),
+        timeout=kwargs.pop("timeout", None),
+        use_circuit_breaker=kwargs.pop("use_circuit_breaker", None),
+    )
+    return gateway.generate_text(
+        prompt,
+        system_instruction=kwargs.pop("system_instruction", None),
+    )
+
+
+# Aliases for seamless integration with existing orchestration code.
+FailClosedAIGateway = SafeAIGateway
+SafeMockClient = MockClient
+FallbackMockClient = MockClient
+AIFallbackResult = SafeAIResult
+generate_with_fallback = safe_generate
+call_ai_with_fallback = safe_generate
