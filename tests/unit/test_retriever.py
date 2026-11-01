@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
-from hermes.rag.retriever import KeywordRetriever, bo_dau
+from hermes.rag.retriever import KeywordRetriever, bo_dau  # noqa: E402
 
 
 def _vb(vid, nganh=None, het_hieu_luc=None):
