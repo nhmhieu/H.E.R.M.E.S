@@ -27,4 +27,3 @@ def test_parse_ics_deadlines_extracts_events():
 def test_parse_ics_empty_or_invalid_returns_empty():
     assert parse_ics_deadlines("") == []
     assert parse_ics_deadlines("NOT AN ICS FILE") == []
-
