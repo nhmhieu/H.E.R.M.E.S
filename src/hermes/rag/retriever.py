@@ -226,11 +226,13 @@ def khop_pham_vi(d: dict, chuong_trinh: set[str], khoa: int | None) -> bool:
 
 
 def trich_dan(chunk: dict, vb: dict) -> str:
-    s = f"{vb['loai']} {vb['so_hieu']}".strip() if vb["so_hieu"] else vb["ten_van_ban"]
+    s = "Trích"
     if chunk.get("dieu"):
-        s += f", Điều {chunk['dieu']}"
+        s += f" Điều {chunk['dieu']}"
     if chunk.get("khoan"):
         s += f", Khoản {chunk['khoan']}"
+    ten = vb.get("so_hieu") and f"{vb['loai']} {vb['so_hieu']}".strip() or vb["ten_van_ban"]
+    s += f", {ten}"
     t1, t2 = chunk["trang_start"], chunk["trang_end"]
     s += f", trang {t1}" if t1 == t2 else f", trang {t1}-{t2}"
     return f"{s} ({vb['file_nguon']})"
@@ -444,6 +446,7 @@ class KeywordRetriever:
 
         return {
             "canh_bao": canh_bao,
+            "thong_bao": None if ket_qua else "Không tìm thấy quy định phù hợp",
             "nganh": sorted(nganh),
             "chuong_trinh": sorted(chuong_trinh),
             "can_hoi_lai": can_hoi_lai,
@@ -497,7 +500,7 @@ def main() -> None:
                 "   Lưu ý: quy định khác nhau theo khóa tuyển, hãy nêu khóa (ví dụ: khóa 2023)."
             )
         if not out["ket_qua"]:
-            print("   (không tìm thấy chunk phù hợp)")
+            print("   " + out["thong_bao"])
         tu_khoa = set(tach_tu(q)) - STOPWORDS
         for k in out["ket_qua"]:
             print(f"\n   {k['trich_dan']}   (độ phù hợp {k['diem']})")
