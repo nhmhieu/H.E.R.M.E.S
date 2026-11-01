@@ -231,7 +231,11 @@ def trich_dan(chunk: dict, vb: dict) -> str:
         s += f" Điều {chunk['dieu']}"
     if chunk.get("khoan"):
         s += f", Khoản {chunk['khoan']}"
-    ten = vb.get("so_hieu") and f"{vb['loai']} {vb['so_hieu']}".strip() or vb["ten_van_ban"]
+    ten = (
+        vb.get("so_hieu")
+        and f"{vb['loai']} {vb['so_hieu']}".strip()
+        or vb["ten_van_ban"]
+    )
     s += f", {ten}"
     t1, t2 = chunk["trang_start"], chunk["trang_end"]
     s += f", trang {t1}" if t1 == t2 else f", trang {t1}-{t2}"
