@@ -1,10 +1,3 @@
-"""
-Moodle iCalendar (.ics) Deadline Parser for H.E.R.M.E.S (Role R4 / R8 - Member 6).
-
-Parses standard VEVENT blocks exported from HCMUS Moodle (courses.fit.hcmus.edu.vn)
-into structured deadline dictionaries without external library dependencies.
-"""
-
 from __future__ import annotations
 
 from datetime import datetime

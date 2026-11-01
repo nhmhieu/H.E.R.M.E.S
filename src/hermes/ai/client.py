@@ -1,11 +1,3 @@
-"""
-AI Client module for H.E.R.M.E.S (Member 4 - AI & System Security).
-
-Provides a unified interface for interacting with Google Gemini API
-with strict separation between 'mock' mode (offline, deterministic)
-and 'gemini' mode (live API calls), plus safe instructor announcement extraction.
-"""
-
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
