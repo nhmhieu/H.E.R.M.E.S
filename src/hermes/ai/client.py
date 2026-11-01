@@ -24,8 +24,11 @@ from hermes.security.guardrails import (
 )
 
 DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
+DEFAULT_OLLAMA_MODEL = "qwen2.5:3b"
+DEFAULT_OLLAMA_BASE_URL = "http://localhost:11434"
 DEFAULT_AI_MODE = "mock"
 _MODEL_NAME_RE = re.compile(r"^[A-Za-z0-9._-]+$")
+_OLLAMA_MODEL_NAME_RE = re.compile(r"^[A-Za-z0-9._:-]+$")
 _RETRYABLE_HTTP_STATUS = {429, 500, 502, 503, 504}
 _MAX_HTTP_ATTEMPTS = 3
 UNKNOWN_VALUE = "Chưa xác định"
@@ -383,29 +386,48 @@ class HermesAIClient:
             mode if mode is not None else os.getenv("HERMES_AI_MODE", DEFAULT_AI_MODE)
         )
         if not isinstance(resolved_mode, str):
-            raise AIConfigError("HERMES_AI_MODE must be a string ('mock' or 'gemini').")
+            raise AIConfigError(
+                "HERMES_AI_MODE must be a string ('mock', 'ollama', or 'gemini')."
+            )
 
         self.mode = resolved_mode.strip().lower()
-        if self.mode not in {"mock", "gemini"}:
+        if self.mode not in {"mock", "ollama", "gemini"}:
             raise AIConfigError(
                 f"Invalid HERMES_AI_MODE '{resolved_mode}'. "
-                "Expected 'mock' or 'gemini'."
+                "Expected 'mock', 'ollama', or 'gemini'."
             )
 
         raw_key = api_key if api_key is not None else os.getenv("GEMINI_API_KEY", "")
         self.api_key = str(raw_key).strip()
-
-        raw_model = (
-            model
-            if model is not None
-            else os.getenv("GEMINI_MODEL", DEFAULT_GEMINI_MODEL)
+        self.ollama_base_url = (
+            os.getenv("OLLAMA_BASE_URL", DEFAULT_OLLAMA_BASE_URL).strip().rstrip("/")
+            or DEFAULT_OLLAMA_BASE_URL
         )
-        self.model = str(raw_model).strip() or DEFAULT_GEMINI_MODEL
-        if not _MODEL_NAME_RE.fullmatch(self.model):
-            raise AIConfigError(
-                "Invalid GEMINI_MODEL name. Only letters, digits, '.', '_' and "
-                "'-' are allowed."
+
+        if self.mode == "ollama":
+            raw_model = (
+                model
+                if model is not None
+                else os.getenv("OLLAMA_MODEL", DEFAULT_OLLAMA_MODEL)
             )
+            self.model = str(raw_model).strip() or DEFAULT_OLLAMA_MODEL
+            if not _OLLAMA_MODEL_NAME_RE.fullmatch(self.model):
+                raise AIConfigError(
+                    "Invalid OLLAMA_MODEL name. Only letters, digits, '.', '_', "
+                    "':' and '-' are allowed."
+                )
+        else:
+            raw_model = (
+                model
+                if model is not None
+                else os.getenv("GEMINI_MODEL", DEFAULT_GEMINI_MODEL)
+            )
+            self.model = str(raw_model).strip() or DEFAULT_GEMINI_MODEL
+            if not _MODEL_NAME_RE.fullmatch(self.model):
+                raise AIConfigError(
+                    "Invalid GEMINI_MODEL name. Only letters, digits, '.', '_' and "
+                    "'-' are allowed."
+                )
 
         if (
             not isinstance(timeout, (int, float))
@@ -439,6 +461,12 @@ class HermesAIClient:
 
         if self.mode == "mock":
             return self._generate_mock(prompt=prompt)
+
+        if self.mode == "ollama":
+            return self._generate_ollama(
+                prompt=prompt,
+                system_instruction=system_instruction,
+            )
 
         self._validate_gemini_config()
         return self._generate_gemini(
@@ -507,17 +535,23 @@ class HermesAIClient:
                 is_mock=True,
             )
 
-        self._validate_gemini_config()
         user_payload = (
             "Hãy trích xuất thông tin bài tập từ văn bản thông báo dưới đây "
             "(chỉ dùng dữ kiện có thật, điền 'Chưa xác định' nếu thiếu):\n"
             f"--- BEGIN ANNOUNCEMENT DATA ---\n{clean_text}\n"
             "--- END ANNOUNCEMENT DATA ---"
         )
-        ai_resp = self._generate_gemini(
-            prompt=user_payload,
-            system_instruction=EXTRACTION_SYSTEM_INSTRUCTION,
-        )
+        if self.mode == "ollama":
+            ai_resp = self._generate_ollama(
+                prompt=user_payload,
+                system_instruction=EXTRACTION_SYSTEM_INSTRUCTION,
+            )
+        else:
+            self._validate_gemini_config()
+            ai_resp = self._generate_gemini(
+                prompt=user_payload,
+                system_instruction=EXTRACTION_SYSTEM_INSTRUCTION,
+            )
         extracted = self._parse_and_validate_extraction_json(
             raw_output=ai_resp.text,
             fallback_clean_text=clean_text,
@@ -628,6 +662,64 @@ class HermesAIClient:
             mode="mock",
             model="mock-deterministic-v1",
             is_mock=True,
+        )
+
+    def _generate_ollama(
+        self,
+        prompt: str,
+        system_instruction: str | None = None,
+    ) -> AIResponse:
+        """
+        Call local Ollama LLM server over HTTP REST API (http://localhost:11434/api/generate)
+        using standard library `urllib.request`.
+        """
+        url = f"{self.ollama_base_url}/api/generate"
+        payload: dict[str, Any] = {
+            "model": self.model,
+            "prompt": prompt,
+            "stream": False,
+            "options": {"temperature": 0.2},
+        }
+        if system_instruction:
+            payload["system"] = system_instruction
+
+        data = json.dumps(payload).encode("utf-8")
+        request = urllib.request.Request(
+            url=url,
+            data=data,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+
+        try:
+            with urllib.request.urlopen(request, timeout=self.timeout) as resp:
+                raw_body = resp.read().decode("utf-8", errors="replace")
+        except urllib.error.HTTPError as exc:
+            raise AIClientError(f"Ollama API HTTP {exc.code} error.") from None
+        except (urllib.error.URLError, TimeoutError, OSError) as exc:
+            raise AIClientError(
+                f"Failed to connect to local Ollama server at {self.ollama_base_url}: {exc}"
+            ) from None
+
+        try:
+            parsed = json.loads(raw_body)
+        except ValueError:
+            raise AIClientError(
+                "Invalid JSON response payload from Ollama API."
+            ) from None
+
+        if not isinstance(parsed, dict):
+            raise AIClientError("Invalid response payload from Ollama API.")
+
+        text = parsed.get("response")
+        if not isinstance(text, str) or not text.strip():
+            raise AIClientError("Ollama API returned an empty response.")
+
+        return AIResponse(
+            text=text.strip(),
+            mode="ollama",
+            model=self.model,
+            is_mock=False,
         )
 
     def _generate_gemini(

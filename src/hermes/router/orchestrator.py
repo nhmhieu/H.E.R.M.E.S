@@ -258,12 +258,16 @@ def route_query(query: str) -> Dict[str, Any]:
 
 def extract_grades_from_text(text: str) -> list[dict]:
     results = []
-    pattern = r"([A-Za-zÀ-ỹ0-9\s\+\#\.\-]+)\s*\(\s*(\d+(?:\.\d+)?)\s*,\s*(\d+)\s*(?:tc|tín)?\s*\)"
+    # Pattern 1: Subject Name (Grade, Credits) e.g. "Giải tích 1 (8.0, 4TC)"
+    pattern = (
+        r"([A-Za-zÀ-ỹ0-9\s\+\#\.\-]+)\s*\(\s*(\d+(?:\.\d+)?)\s*,\s*(\d+)"
+        r"\s*(?:tc|tín(?:\s*ch[ỉi\?])?)?\s*\)"
+    )
 
     for match in re.finditer(pattern, text, re.IGNORECASE):
         raw_subject = match.group(1).strip()
         cleaned_parts = re.split(
-            r"[,;\n]|(?:\b(?:và|với|môn|gồm|học\s+kỳ\s+này|học\s+phần|cho|là)\b)",
+            r"[,;\n:]|(?:\b(?:và|với|môn|gồm|học\s+kỳ\s+này|học\s+phần|cho|là)\b)",
             raw_subject,
             flags=re.IGNORECASE,
         )
@@ -277,6 +281,23 @@ def extract_grades_from_text(text: str) -> list[dict]:
                 "credits": credits_val,
             }
         )
+
+    # Pattern 2: Shorthand Grade (Credits) e.g. "8.5 (4 tín chỉ), 7.0 (3TC)"
+    if not results:
+        shorthand_pattern = (
+            r"(\d+(?:\.\d+)?)\s*\(\s*(\d+)\s*(?:tc|tín(?:\s*ch[ỉi\?])?)?\s*\)"
+        )
+        for idx, match in enumerate(
+            re.finditer(shorthand_pattern, text, re.IGNORECASE), start=1
+        ):
+            results.append(
+                {
+                    "subject": f"Học phần {idx}",
+                    "grade": float(match.group(1)),
+                    "credits": int(match.group(2)),
+                }
+            )
+
     return results
 
 
@@ -382,19 +403,39 @@ def orchestrate(query: str, session_id: str = "default_user") -> Dict[str, Any]:
     # ----------------------------------------------------
     elif intent == INTENT_REGULATION_RAG:
         retriever = _get_retriever()
-        rag_res = retriever.search(clean_query)
+        rag_res = retriever.search(clean_query, top_k=5)
         hits = rag_res.get("ket_qua", [])
 
         if hits:
             top_hit = hits[0]
+            q_lower = clean_query.lower()
+            if "hồ sơ" not in q_lower and "thủ tục" not in q_lower:
+                for h in hits:
+                    if h.get("chung_chi_toi_thieu"):
+                        top_hit = h
+                        break
+
             citation = top_hit.get("trich_dan", "Sổ tay sinh viên HCMUS")
+            pham_vi = top_hit.get("pham_vi", "")
             content = top_hit.get("text", "")
             display_text = content[:600] + ("..." if len(content) > 600 else "")
+
+            cert_dict = top_hit.get("chung_chi_toi_thieu")
+            if cert_dict:
+                cert_lines = ["\n📌 Mức điểm chứng chỉ tối thiểu:"]
+                for cert_name, cert_val in cert_dict.items():
+                    cert_lines.append(f"  • {cert_name}: {cert_val}")
+                display_text = display_text + "\n" + "\n".join(cert_lines)
+
+            header = f"📖 Theo quy định ({citation})"
+            if pham_vi:
+                header += f" [Phạm vi: {pham_vi}]"
+
             return {
                 "status": "success",
                 "intent": intent,
                 "target_engine": target_engine,
-                "response_text": f"📖 Theo quy định ({citation}):\n\n{display_text}",
+                "response_text": f"{header}:\n\n{display_text}",
                 "data": {"total_matches": len(hits), "top_hit": top_hit},
                 "provenance": citation,
             }
@@ -428,7 +469,32 @@ def orchestrate(query: str, session_id: str = "default_user") -> Dict[str, Any]:
         }
 
     # ----------------------------------------------------
-    # Nhánh D: Các tác vụ khác / Fallback
+    # Nhánh D: Trích xuất Deadline thông báo giảng viên (R4)
+    # ----------------------------------------------------
+    elif intent == INTENT_EXTRACT_DEADLINE:
+        from hermes.ai.client import extract_announcement_info
+
+        info = extract_announcement_info(clean_query)
+        info_dict = info.to_dict()
+        lines = [
+            "📅 Kết quả trích xuất thông tin Deadline / Bài tập:",
+            f"  • Môn học:           {info.course_name}",
+            f"  • Nội dung bài tập:  {info.assignment_content}",
+            f"  • Hạn chót (Deadline): {info.deadline}",
+            f"  • Hình thức nộp:     {info.submission_format}",
+            f"  • Yêu cầu khác:      {info.other_requirements}",
+        ]
+        return {
+            "status": "success",
+            "intent": intent,
+            "target_engine": target_engine,
+            "response_text": "\n".join(lines),
+            "data": info_dict,
+            "provenance": "H.E.R.M.E.S AI Announcement Extractor (R4)",
+        }
+
+    # ----------------------------------------------------
+    # Nhánh E: Các tác vụ khác / Fallback
     # ----------------------------------------------------
     else:
         return {

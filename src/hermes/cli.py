@@ -3,7 +3,11 @@ import click
 from rich.console import Console
 from rich.table import Table
 
-from hermes.engines.academic_calc import calculate_gpa, check_academic_warning
+from hermes.engines.academic_calc import (
+    calculate_gpa_10,
+    calculate_gpa_4,
+    check_academic_warning,
+)
 from hermes.engines.scheduler import generate_study_plan
 
 if sys.platform == "win32":
@@ -49,15 +53,29 @@ def gpa(grades, total_credits):
         console.print("[yellow]No grades provided. Use -g <grade> <credits>[/yellow]")
         return
 
-    gpa_val = calculate_gpa(list(grades))
-    console.print(f"Calculated GPA: [bold green]{gpa_val}[/bold green]")
+    grades_list = list(grades)
+    gpa_10 = calculate_gpa_10(grades_list)
+    gpa_4 = calculate_gpa_4(grades_list)
+    console.print(
+        f"Calculated GPA: [bold green]{gpa_10:.2f}[/bold green] (Scale 10) | "
+        f"[bold cyan]{gpa_4:.2f}[/bold cyan] (Scale 4)"
+    )
 
     if total_credits > 0:
-        warning_info = check_academic_warning(gpa_val, total_credits)
+        earned_credits = sum(c for g, c in grades_list if g >= 5.0)
+        warning_info = check_academic_warning(
+            current_semester_earned_credits=earned_credits,
+            accumulated_credits=max(total_credits, earned_credits),
+            previous_semester_gpa=gpa_10,
+            two_previous_semesters_gpa=gpa_10,
+        )
         status_color = "red" if warning_info["is_warning"] else "green"
         console.print(
             f"Academic Status: [bold {status_color}]{warning_info['status']}[/bold {status_color}]"
         )
+        if warning_info.get("reasons"):
+            for reason in warning_info["reasons"]:
+                console.print(f"  [yellow]• {reason}[/yellow]")
 
 
 @cli.command()
@@ -93,12 +111,19 @@ def plan(subject, hours, days):
 
     table = Table(title=f"Study Plan for Next {days} Days ({hours} hrs/day)")
     table.add_column("Subject", style="cyan")
+    table.add_column("Credits", justify="right", style="white")
+    table.add_column("Priority", justify="right", style="yellow")
     table.add_column("Total Hours Allocated", justify="right", style="magenta")
     table.add_column("Daily Hours", justify="right", style="green")
 
     for item in schedule:
+        subj_name = item.get("name") or item.get("subject", "Unknown")
         table.add_row(
-            item["subject"], str(item["allocated_hours"]), str(item["daily_hours"])
+            str(subj_name),
+            str(item.get("credits", "")),
+            str(item.get("priority", "")),
+            str(item["allocated_hours"]),
+            str(item["daily_hours"]),
         )
 
     console.print(table)
