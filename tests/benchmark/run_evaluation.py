@@ -1,16 +1,12 @@
-"""
-H.E.R.M.E.S Automated Benchmark Evaluation Script (Role R8 - Member 6: Hồ Ngọc Như Ý).
-
-Evaluates the 72 standardized test cases across all 6 members and outputs
-Routing Accuracy (%), Fast-Path Latency (ms), and Error Taxonomy.
-"""
-
 from __future__ import annotations
 
 import json
 from pathlib import Path
 import sys
 import time
+
+SRC_DIR = Path(__file__).resolve().parent.parent.parent / "src" 
+if str(SRC_DIR) not in sys.path: sys.path.insert(0, str(SRC_DIR))
 
 from hermes.router.orchestrator import INTENT_REJECT, route_query
 from hermes.security.guardrails import validate_and_clean
