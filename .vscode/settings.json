@@ -1,0 +1,7 @@
+﻿{
+    "python.defaultInterpreterPath": "G:\\h\\H.E.R.M.E.S\\.venv\\Scripts\\python.exe",
+    "python.analysis.extraPaths": [
+        "G:\\h\\H.E.R.M.E.S\\src",
+        "G:\\h\\H.E.R.M.E.S\\.venv\\Lib\\site-packages"
+    ]
+}

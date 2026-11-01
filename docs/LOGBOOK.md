@@ -1,54 +1,22 @@
-# Team Logbook
+# Team Progress Logbook (H.E.R.M.E.S)
 
-| Week | Member | Role | Assigned Tasks | Completed PRs | Blockers | Lessons Learned |
-|---|---|---|---|---|---|---|
-| Week 1 | Member 1 | Team Leader & Orchestration Lead | | | | |
-| Week 1 | Member 2 | Deterministic Algorithms Lead | | | | |
-| Week 1 | Member 3 | Data & RAG Lead | | | | |
-| Week 1 | Member 4 | AI & Safety Lead | | | | |
-| Week 1 | Member 5 | Interface & QA/Evaluation Lead | | | | |
-| Week 2 | Member 1 | Team Leader & Orchestration Lead | | | | |
-| Week 2 | Member 2 | Deterministic Algorithms Lead | | | | |
-| Week 2 | Member 3 | Data & RAG Lead | | | | |
-| Week 2 | Member 4 | AI & Safety Lead | | | | |
-| Week 2 | Member 5 | Interface & QA/Evaluation Lead | | | | |
-| Week 3 | Member 1 | Team Leader & Orchestration Lead | | | | |
-| Week 3 | Member 2 | Deterministic Algorithms Lead | | | | |
-| Week 3 | Member 3 | Data & RAG Lead | | | | |
-| Week 3 | Member 4 | AI & Safety Lead | | | | |
-| Week 3 | Member 5 | Interface & QA/Evaluation Lead | | | | |
-| Week 4 | Member 1 | Team Leader & Orchestration Lead | | | | |
-| Week 4 | Member 2 | Deterministic Algorithms Lead | | | | |
-| Week 4 | Member 3 | Data & RAG Lead | | | | |
-| Week 4 | Member 4 | AI & Safety Lead | | | | |
-| Week 4 | Member 5 | Interface & QA/Evaluation Lead | | | | |
-| Week 5 | Member 1 | Team Leader & Orchestration Lead | | | | |
-| Week 5 | Member 2 | Deterministic Algorithms Lead | | | | |
-| Week 5 | Member 3 | Data & RAG Lead | | | | |
-| Week 5 | Member 4 | AI & Safety Lead | | | | |
-| Week 5 | Member 5 | Interface & QA/Evaluation Lead | | | | |
-| Week 6 | Member 1 | Team Leader & Orchestration Lead | | | | |
-| Week 6 | Member 2 | Deterministic Algorithms Lead | | | | |
-| Week 6 | Member 3 | Data & RAG Lead | | | | |
-| Week 6 | Member 4 | AI & Safety Lead | | | | |
-| Week 6 | Member 5 | Interface & QA/Evaluation Lead | | | | |
-| Week 7 | Member 1 | Team Leader & Orchestration Lead | | | | |
-| Week 7 | Member 2 | Deterministic Algorithms Lead | | | | |
-| Week 7 | Member 3 | Data & RAG Lead | | | | |
-| Week 7 | Member 4 | AI & Safety Lead | | | | |
-| Week 7 | Member 5 | Interface & QA/Evaluation Lead | | | | |
-| Week 8 | Member 1 | Team Leader & Orchestration Lead | | | | |
-| Week 8 | Member 2 | Deterministic Algorithms Lead | | | | |
-| Week 8 | Member 3 | Data & RAG Lead | | | | |
-| Week 8 | Member 4 | AI & Safety Lead | | | | |
-| Week 8 | Member 5 | Interface & QA/Evaluation Lead | | | | |
-| Week 9 | Member 1 | Team Leader & Orchestration Lead | | | | |
-| Week 9 | Member 2 | Deterministic Algorithms Lead | | | | |
-| Week 9 | Member 3 | Data & RAG Lead | | | | |
-| Week 9 | Member 4 | AI & Safety Lead | | | | |
-| Week 9 | Member 5 | Interface & QA/Evaluation Lead | | | | |
-| Week 10 | Member 1 | Team Leader & Orchestration Lead | | | | |
-| Week 10 | Member 2 | Deterministic Algorithms Lead | | | | |
-| Week 10 | Member 3 | Data & RAG Lead | | | | |
-| Week 10 | Member 4 | AI & Safety Lead | | | | |
-| Week 10 | Member 5 | Interface & QA/Evaluation Lead | | | | |
+| Week | Member | Role | Assigned Tasks | Completed PRs / Artifacts | Blockers | Lessons Learned |
+| :---: | :--- | :--- | :--- | :--- | :--- | :--- |
+| **Week 1** | **TV1 – Nguyễn Huỳnh Minh Hiếu** (`25127331`) | Team Leader & System Architect (R1, R5) | Repository scaffolding, CI workflow setup, Project Charter, C4 Architecture diagrams | PR `#1`, PR `#16` (`docs/PROJECT_CHARTER.md`, `docs/ARCHITECTURE.md`) | Aligning router contracts across 6 members | Establishing JSON input/output contracts early prevents merge conflicts |
+| **Week 1** | **TV2 – Nghiêm Đình Thuận** (`25127152`) | Deterministic & Algorithm Lead (R2) | Research HCMUS credit regulations (`1175/QĐ-KHTN`), implement Scale-10 & Scale-4 GPA calculation | `src/hermes/engines/academic_calc.py` | Clarifying official 10-to-4 conversion thresholds | Always verify mathematical edge cases (0 credits, boundary scores) with parametrized tests |
+| **Week 1** | **TV3 – Đào Ngọc Vinh** (`25127552`) | Knowledge Base & RAG Lead (R3) | Collect 17 official HCMUS PDFs (Handbook, Credit regulations, Foreign language exit standards) | Raw & cleaned regulation corpus | PDF table extraction formatting issues | Hierarchical JSON structure (`van_ban` -> `chunks`) preserves legal scope better than flat text |
+| **Week 1** | **TV4 – Đào Nhật Quân** (`25127471`) | System Safety & Local AI Lead (R7, R4) | Design 4-layer Fail-Closed Guardrail architecture & prompt injection patterns | `src/hermes/security/guardrails.py` | Balancing strict injection blocking with benign academic queries | Normalize Unicode and strip zero-width characters before regex matching |
+| **Week 1** | **TV5 – Phan Huỳnh Minh Tuấn** (`25127168`) | UI/UX & Client Application Lead (R6) | Design Rich CLI commands and wireframe Streamlit Web Dashboard layout | CLI & UI prototypes | Windows PowerShell UTF-8 encoding issues | Configure `sys.stdout.reconfigure(encoding="utf-8")` for Vietnamese console output |
+| **Week 1** | **TV6 – Hồ Ngọc Như Ý** (`25127176`) | QA, Evaluation & Benchmark Lead (R8, R4) | Define benchmark schema and evaluation metrics (Accuracy, Latency, Defense Rate) | `tests/benchmark/test_benchmark_suite.py` | Standardizing intent labels across test cases | Shared intent constants eliminate mismatches between router and test harness |
+| **Week 2** | **TV1 – Nguyễn Huỳnh Minh Hiếu** (`25127331`) | Team Leader & System Architect (R1, R5) | Implement Two-Tier Intent Router (`route_query`), grade regex extractor, and 12 TV1 benchmark cases | PR `#16` (`src/hermes/router/orchestrator.py`, `test_orchestrator.py`) | Extracting multi-course grades from free-form Vietnamese | Support both named courses and shorthand `grade (credits)` patterns |
+| **Week 2** | **TV2 – Nghiêm Đình Thuận** (`25127152`) | Deterministic & Algorithm Lead (R2) | Implement Article 16 academic warning logic (`<7` earned credits, `<3.0`/`<4.0` GPA) & unit tests | PR `#25` (`src/hermes/engines/academic_calc.py`, `test_academic_calc.py`) | Handling missing previous semester GPA safely | Return explicit `missing_checks` when historical GPA is not yet provided |
+| **Week 2** | **TV3 – Đào Ngọc Vinh** (`25127552`) | Knowledge Base & RAG Lead (R3) | Complete 4,739-line `hcmus_regulations.json` and implement `KeywordRetriever` (BM25 + cohort filter) | PR `#18` (`data/processed/hcmus_regulations.json`, `retriever.py`) | Distinguishing 4 English exit decisions (`2464`, `1983`, `1984`, `1985`) | Pre-filtering by `nganh`, `chuong_trinh`, and `khoa_tuyen` before BM25 ranking eliminates cross-program confusion |
+| **Week 2** | **TV4 – Đào Nhật Quân** (`25127471`) | System Safety & Local AI Lead (R7, R4) | Implement `HermesAIClient` announcement extractor with grounding verification and 250+ security tests | PR `#19` (`src/hermes/ai/client.py`, `test_guardrails.py`) | Preventing LLM hallucinated deadlines | Cross-check every numeric token and file extension against source text |
+| **Week 2** | **TV5 – Phan Huỳnh Minh Tuấn** (`25127168`) | UI/UX & Client Application Lead (R6) | Build Streamlit chat interface, sidebar GPA form, and 10-slide Proposal presentation deck | PR `#27` (`src/hermes/ui/app.py`, `ai_cli.py`, Slide Deck) | Removing Visual Studio `.vs/` cache files from Git tracking | Always add IDE cache directories to `.gitignore` before `git add` |
+| **Week 2** | **TV6 – Hồ Ngọc Như Ý** (`25127176`) | QA, Evaluation & Benchmark Lead (R8, R4) | Author 12 deadline extraction benchmark cases and prototype `run_evaluation.py` | Branch `feat/benchmark-ai-extractor` (`benchmark_cases.json`, `run_evaluation.py`) | Formatting long Vietnamese strings within `flake8` line limits | Run `black src tests` locally before pushing to remote branches |
+| **Week 3** | **TV1 – Nguyễn Huỳnh Minh Hiếu** (`25127331`) | Team Leader & System Architect (R1, R5) | Complete master `orchestrate()` pipeline, revise Proposal per lecturer feedback (Ollama, Cost, Related Works, Business Model, WBS) | Commit `2a73c52` on `main` (`orchestrator.py`, `cli.py`, `PROPOSAL_DRAFT.md`) | Integrating all 4 engines under a unified response dictionary | Singleton caching (`_get_retriever`) keeps RAG latency under 2ms |
+| **Week 3** | **TV2 – Nghiêm Đình Thuận** (`25127152`) | Deterministic & Algorithm Lead (R2) | Implement EDF exam scheduler (`schedule_exams`) and What-If GPA simulator (`simulate_gpa`) + 200+ tests | PR `#26` merged to `main` (`scheduler.py`, `test_scheduler.py`) | Balancing daily free hours backward from exam dates | Sorting exams by `exam_date` ascending ensures earliest exams are prioritized |
+| **Week 3** | **TV3 – Đào Ngọc Vinh** (`25127552`) | Knowledge Base & RAG Lead (R3) | Add automated unit tests for `KeywordRetriever` (`test_retriever.py`) and structured certificate table output | `tests/unit/test_retriever.py` | Prioritizing certificate score tables over administrative procedure clauses | Boosting chunks with `chung_chi_toi_thieu` yields exact exit standard tables |
+| **Week 3** | **TV4 – Đào Nhật Quân** (`25127471`) | System Safety & Local AI Lead (R7, R4) | Expand adversarial defense to 500-case red-team suite (Base64/ROT13/Leetspeak/Multilingual) & add Local **Ollama (`qwen2.5:3b`)** mode | PR `#28` merged to `main` (`guardrails.py`, `client.py`, `test_guardrails.py`) | Keeping guardrail latency below 2ms with large regex sets | Pre-compile regex patterns at module import time |
+| **Week 3** | **TV5 – Phan Huỳnh Minh Tuấn** (`25127168`) | UI/UX & Client Application Lead (R6) | Connect 3-Tab Streamlit Web Dashboard (`app.py`) to live `orchestrate()`, `scheduler`, and `deadline_parser` | `src/hermes/ui/app.py` | Synchronizing Streamlit `session_state` across tabs | Store course list and chat messages in `st.session_state` for seamless tab switching |
+| **Week 3** | **TV6 – Hồ Ngọc Như Ý** (`25127176`) | QA, Evaluation & Benchmark Lead (R8, R4) | Complete Moodle `.ics` parser (`deadline_parser.py`) and run 72-case Benchmark Iteration 1 (100% accuracy, 0.60ms latency) | `deadline_parser.py`, `benchmark_cases.json`, `run_evaluation.py` | Unfolding multi-line RFC 5545 `.ics` descriptions | Unfold continuation lines starting with whitespace before parsing `VEVENT` keys |

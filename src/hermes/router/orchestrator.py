@@ -1,5 +1,507 @@
-def route_query(query: str) -> dict:
+"""
+Orchestrator and Intent Router for H.E.R.M.E.S.
+
+Routes user queries to appropriate specialized engines:
+- CALC_GPA: Deterministic Academic Engine (R2)
+- SCHEDULING: Deterministic Scheduler (R2)
+- REGULATION_RAG: Retrieval Augmented Generation Engine (R3)
+- EXTRACT_DEADLINE: AI Entity Extraction (R4)
+- CLARIFY: System needs clarification (R5)
+- REJECT: System rejects query due to policy violation or out-of-scope (R5/R7)
+"""
+
+import re
+from typing import Any, Dict
+
+# Constants for Intents
+INTENT_CALC_GPA = "CALC_GPA"
+INTENT_SCHEDULING = "SCHEDULING"
+INTENT_REGULATION_RAG = "REGULATION_RAG"
+INTENT_EXTRACT_DEADLINE = "EXTRACT_DEADLINE"
+INTENT_CLARIFY = "CLARIFY"
+INTENT_REJECT = "REJECT"
+
+# Patterns for REJECT (Prompt injection, Non-goals: homework solving)
+REJECT_PATTERNS = [
+    r"bỏ qua (các )?chỉ dẫn",
+    r"ignore (all )?previous instructions",
+    r"system prompt",
+    r"jailbreak",
+    r"giải (hộ|giúp|dùm) (bài tập|đề thi|bài lab)",
+    r"làm (hộ|giúp|dùm) (bài tập|đồ án|assignment)",
+    r"viết (code|chương trình) (hộ|giúp|dùm|thay) mình",
+    r"do my homework",
+    r"solve (this|my) (assignment|exam)",
+    r"hack portal",
+]
+
+# Keyword dictionaries with weights
+GPA_KEYWORDS = [
+    "gpa",
+    "điểm",
+    "tính điểm",
+    "tính gpa",
+    "cảnh báo học vụ",
+    "buộc thôi học",
+    "học vụ",
+    "tín chỉ tích lũy",
+    "thang điểm 10",
+    "thang điểm 4",
+    "quy đổi điểm",
+    "điểm rèn luyện",
+    "học bổng",
+    "xếp loại",
+    "học kỳ",
+    "what-if",
+    "dự báo điểm",
+]
+
+SCHEDULING_KEYWORDS = [
+    "lịch",
+    "lịch thi",
+    "xếp lịch",
+    "lập lịch",
+    "thời gian biểu",
+    "ôn thi",
+    "kế hoạch học",
+    "thời khóa biểu",
+    "phân bổ giờ",
+    "giờ rảnh",
+    "schedule",
+    "study plan",
+    "ngày thi",
+    "học bài",
+]
+
+REGULATION_KEYWORDS = [
+    "quy chế",
+    "sổ tay",
+    "điều khoản",
+    "chuẩn đầu ra",
+    "tiếng anh",
+    "toeic",
+    "ielts",
+    "vstep",
+    "học lại",
+    "học cải thiện",
+    "rút học phần",
+    "rút môn",
+    "đăng ký học phần",
+    "chuyển ngành",
+    "bảo lưu",
+    "tốt nghiệp",
+    "điều kiện tốt nghiệp",
+    "miễn giảm",
+    "chứng chỉ",
+    "phòng đào tạo",
+]
+
+DEADLINE_KEYWORDS = [
+    "deadline",
+    "hạn nộp",
+    "thông báo:",
+    "bài tập lab",
+    "nộp bài",
+    ".ics",
+    "ical",
+    "moodle",
+    "hạn chót",
+    "thầy gửi",
+    "cô gửi",
+]
+
+CLARIFY_TRIGGERS = [
+    "cứu em",
+    "cứu mình",
+    "giúp em",
+    "giúp mình",
+    "alo",
+    "ad ơi",
+    "admin ơi",
+    "chào bạn",
+    "hello",
+    "hi",
+    "ơi",
+]
+
+
+def _match_any_pattern(text: str, patterns: list[str]) -> bool:
+    for pattern in patterns:
+        if re.search(pattern, text, re.IGNORECASE):
+            return True
+    return False
+
+
+def _score_keywords(text_lower: str, keywords: list[str]) -> int:
+    score = 0
+    for kw in keywords:
+        if kw in text_lower:
+            score += 1
+    return score
+
+
+def route_query(query: str) -> Dict[str, Any]:
     """
-    Placeholder for Intent routing & fallback state machine.
+    Route an incoming query to the appropriate engine.
+
+    Returns a dictionary conforming to the Router Contract:
+    {
+        "intent": str,
+        "confidence": float,
+        "target_engine": str,
+        "extracted_params": dict,
+        "message": str
+    }
     """
-    return {"engine": "fallback", "action": "Not implemented"}
+    if not query or not query.strip():
+        return {
+            "intent": INTENT_CLARIFY,
+            "confidence": 1.0,
+            "target_engine": "clarifier",
+            "extracted_params": {},
+            "message": "Vui lòng nhập câu hỏi hoặc yêu cầu cần trợ giúp.",
+        }
+
+    clean_query = query.strip()
+    query_lower = clean_query.lower()
+
+    # 1. Check for Rejection / Policy violations
+    if _match_any_pattern(clean_query, REJECT_PATTERNS):
+        return {
+            "intent": INTENT_REJECT,
+            "confidence": 0.99,
+            "target_engine": "guardrails",
+            "extracted_params": {"reason": "Policy violation or Non-goal"},
+            "message": (
+                "Yêu cầu vi phạm quy định an toàn hoặc nằm ngoài phạm vi hỗ trợ "
+                "(Hệ thống không giải bài tập hộ sinh viên)."
+            ),
+        }
+
+    # 2. Check for Ambiguous / Clarification queries
+    words = clean_query.split()
+    if len(words) <= 3:
+        for trigger in CLARIFY_TRIGGERS:
+            if trigger in query_lower:
+                return {
+                    "intent": INTENT_CLARIFY,
+                    "confidence": 0.90,
+                    "target_engine": "clarifier",
+                    "extracted_params": {},
+                    "message": (
+                        "Chào bạn! Bạn cần H.E.R.M.E.S hỗ trợ về tính điểm GPA, "
+                        "lập lịch ôn thi hay tra cứu quy chế học vụ?"
+                    ),
+                }
+
+    # 3. Score categories (Fast-Path)
+    gpa_score = _score_keywords(query_lower, GPA_KEYWORDS)
+    sched_score = _score_keywords(query_lower, SCHEDULING_KEYWORDS)
+    reg_score = _score_keywords(query_lower, REGULATION_KEYWORDS)
+    dl_score = _score_keywords(query_lower, DEADLINE_KEYWORDS)
+
+    # Contextual priority checks
+    # Check for Deadline extraction first if text looks like an announcement
+    if dl_score >= 2 or (".ics" in query_lower) or ("thông báo:" in query_lower):
+        return {
+            "intent": INTENT_EXTRACT_DEADLINE,
+            "confidence": 0.90,
+            "target_engine": "ai_extractor",
+            "extracted_params": {"raw_text": clean_query},
+            "message": "Trích xuất deadline và thông tin bài tập.",
+        }
+
+    # If scores are all 0
+    max_score = max(gpa_score, sched_score, reg_score)
+    if max_score == 0:
+        return {
+            "intent": INTENT_CLARIFY,
+            "confidence": 0.50,
+            "target_engine": "clarifier",
+            "extracted_params": {},
+            "message": "Câu hỏi chưa rõ ràng. Bạn có thể nói rõ hơn về vấn đề học vụ hoặc lịch học cần giúp đỡ không?",
+        }
+
+    # Scheduling intent
+    if sched_score > gpa_score and sched_score >= reg_score:
+        return {
+            "intent": INTENT_SCHEDULING,
+            "confidence": min(0.60 + sched_score * 0.15, 0.98),
+            "target_engine": "scheduler_engine",
+            "extracted_params": {},
+            "message": "Định tuyến tới bộ lập lịch ôn tập.",
+        }
+
+    # GPA Calculation intent
+    if gpa_score >= sched_score and gpa_score >= reg_score:
+        extracted_grades = extract_grades_from_text(clean_query)
+        return {
+            "intent": INTENT_CALC_GPA,
+            "confidence": min(0.60 + gpa_score * 0.15, 0.98),
+            "target_engine": "academic_engine",
+            "extracted_params": {
+                "grades": extracted_grades,
+                "raw_text": clean_query,
+            },
+            "message": "Định tuyến tới bộ tính toán học vụ và GPA.",
+        }
+
+    # Regulation / RAG intent
+    return {
+        "intent": INTENT_REGULATION_RAG,
+        "confidence": min(0.60 + reg_score * 0.15, 0.98),
+        "target_engine": "rag_retriever",
+        "extracted_params": {"query": clean_query},
+        "message": "Định tuyến tới bộ tra cứu quy chế và sổ tay sinh viên.",
+    }
+
+
+def extract_grades_from_text(text: str) -> list[dict]:
+    results = []
+    # Pattern 1: Subject Name (Grade, Credits) e.g. "Giải tích 1 (8.0, 4TC)"
+    pattern = (
+        r"([A-Za-zÀ-ỹ0-9\s\+\#\.\-]+)\s*\(\s*(\d+(?:\.\d+)?)\s*,\s*(\d+)"
+        r"\s*(?:tc|tín(?:\s*ch[ỉi\?])?)?\s*\)"
+    )
+
+    for match in re.finditer(pattern, text, re.IGNORECASE):
+        raw_subject = match.group(1).strip()
+        cleaned_parts = re.split(
+            r"[,;\n:]|(?:\b(?:và|với|môn|gồm|học\s+kỳ\s+này|học\s+phần|cho|là)\b)",
+            raw_subject,
+            flags=re.IGNORECASE,
+        )
+        subject_name = cleaned_parts[-1].strip() if cleaned_parts else raw_subject
+        grade_val = float(match.group(2))
+        credits_val = int(match.group(3))
+        results.append(
+            {
+                "subject": subject_name,
+                "grade": grade_val,
+                "credits": credits_val,
+            }
+        )
+
+    # Pattern 2: Shorthand Grade (Credits) e.g. "8.5 (4 tín chỉ), 7.0 (3TC)"
+    if not results:
+        shorthand_pattern = (
+            r"(\d+(?:\.\d+)?)\s*\(\s*(\d+)\s*(?:tc|tín(?:\s*ch[ỉi\?])?)?\s*\)"
+        )
+        for idx, match in enumerate(
+            re.finditer(shorthand_pattern, text, re.IGNORECASE), start=1
+        ):
+            results.append(
+                {
+                    "subject": f"Học phần {idx}",
+                    "grade": float(match.group(1)),
+                    "credits": int(match.group(2)),
+                }
+            )
+
+    return results
+
+
+_RETRIEVER_INSTANCE = None
+
+
+def _get_retriever():
+    global _RETRIEVER_INSTANCE
+    if _RETRIEVER_INSTANCE is None:
+        from hermes.rag.retriever import KeywordRetriever
+
+        _RETRIEVER_INSTANCE = KeywordRetriever()
+    return _RETRIEVER_INSTANCE
+
+
+def orchestrate(query: str, session_id: str = "default_user") -> Dict[str, Any]:
+    """
+    Master Pipeline điều phối toàn bộ hệ thống H.E.R.M.E.S.
+
+    Quy trình:
+    1. Quét an toàn qua Guardrails (R7)
+    2. Phân loại ý định qua Router 2 tầng (R5)
+    3. Điều hướng xử lý sang GPA Engine (R2) hoặc RAG Quy chế (R3)
+    4. Định dạng và đóng gói kết quả chuẩn trả về cho Giao diện UI/CLI (R6)
+    """
+    from hermes.security.guardrails import validate_and_clean
+    from hermes.engines.academic_calc import (
+        calculate_gpa_10,
+        calculate_gpa_4,
+        convert_score_to_4_and_letter,
+    )
+
+    # 1. Quét an toàn đầu vào (R7)
+    guard_res = validate_and_clean(query)
+    if not guard_res.allowed:
+        return {
+            "status": "blocked",
+            "intent": INTENT_REJECT,
+            "target_engine": "guardrails",
+            "response_text": (
+                f"Yêu cầu bị từ chối: {guard_res.reason} "
+                "(H.E.R.M.E.S không hỗ trợ giải bài tập hoặc xử lý câu lệnh bất thường)."
+            ),
+            "data": {"category": guard_res.category},
+            "provenance": None,
+        }
+
+    clean_query = guard_res.cleaned_text
+
+    # 2. Phân loại ý định qua Router (R5)
+    route_info = route_query(clean_query)
+    intent = route_info["intent"]
+    target_engine = route_info["target_engine"]
+    extracted = route_info.get("extracted_params", {})
+
+    # 3. Điều phối theo Intent
+    # ----------------------------------------------------
+    # Nhánh A: Tính điểm học vụ GPA (R2)
+    # ----------------------------------------------------
+    if intent == INTENT_CALC_GPA:
+        grades = extracted.get("grades", [])
+        if grades:
+            grade_tuples = [(g["grade"], g["credits"]) for g in grades]
+            gpa_10 = calculate_gpa_10(grade_tuples)
+            gpa_4 = calculate_gpa_4(grade_tuples)
+
+            lines = [
+                f"📊 Kết quả tính điểm học vụ ({len(grades)} môn học):",
+                f"  • Điểm trung bình tích lũy hệ 10: {gpa_10:.2f}",
+                f"  • Điểm trung bình tích lũy hệ 4:  {gpa_4:.2f}",
+                "\nChi tiết từng môn:",
+            ]
+            for g in grades:
+                _, letter = convert_score_to_4_and_letter(g["grade"])
+                lines.append(
+                    f"  - {g['subject']}: {g['grade']} ({g['credits']} tín chỉ) -> Điểm chữ: {letter}"
+                )
+
+            return {
+                "status": "success",
+                "intent": intent,
+                "target_engine": target_engine,
+                "response_text": "\n".join(lines),
+                "data": {"gpa_10": gpa_10, "gpa_4": gpa_4, "grades": grades},
+                "provenance": "Quy chế Đào tạo tín chỉ Trường ĐH Khoa học Tự nhiên, ĐHQG-HCM",
+            }
+        else:
+            return {
+                "status": "needs_info",
+                "intent": intent,
+                "target_engine": target_engine,
+                "response_text": (
+                    "Bạn muốn tính điểm GPA hoặc kiểm tra cảnh báo học vụ? "
+                    "Vui lòng cung cấp danh sách điểm theo định dạng: "
+                    "Tên môn (Điểm, Số tín chỉ), ví dụ: Giải tích 1 (8.0, 4TC) và C++ (7.5, 3 tín)."
+                ),
+                "data": extracted,
+                "provenance": None,
+            }
+
+    # ----------------------------------------------------
+    # Nhánh B: Tra cứu quy chế RAG (R3)
+    # ----------------------------------------------------
+    elif intent == INTENT_REGULATION_RAG:
+        retriever = _get_retriever()
+        rag_res = retriever.search(clean_query, top_k=5)
+        hits = rag_res.get("ket_qua", [])
+
+        if hits:
+            top_hit = hits[0]
+            q_lower = clean_query.lower()
+            if "hồ sơ" not in q_lower and "thủ tục" not in q_lower:
+                for h in hits:
+                    if h.get("chung_chi_toi_thieu"):
+                        top_hit = h
+                        break
+
+            citation = top_hit.get("trich_dan", "Sổ tay sinh viên HCMUS")
+            pham_vi = top_hit.get("pham_vi", "")
+            content = top_hit.get("text", "")
+            display_text = content[:600] + ("..." if len(content) > 600 else "")
+
+            cert_dict = top_hit.get("chung_chi_toi_thieu")
+            if cert_dict:
+                cert_lines = ["\n📌 Mức điểm chứng chỉ tối thiểu:"]
+                for cert_name, cert_val in cert_dict.items():
+                    cert_lines.append(f"  • {cert_name}: {cert_val}")
+                display_text = display_text + "\n" + "\n".join(cert_lines)
+
+            header = f"📖 Theo quy định ({citation})"
+            if pham_vi:
+                header += f" [Phạm vi: {pham_vi}]"
+
+            return {
+                "status": "success",
+                "intent": intent,
+                "target_engine": target_engine,
+                "response_text": f"{header}:\n\n{display_text}",
+                "data": {"total_matches": len(hits), "top_hit": top_hit},
+                "provenance": citation,
+            }
+        else:
+            return {
+                "status": "success",
+                "intent": intent,
+                "target_engine": target_engine,
+                "response_text": (
+                    "Hiện tại chưa tìm thấy điều khoản quy chế chính xác trong Sổ tay SV HCMUS "
+                    "cho câu hỏi này. Bạn vui lòng liên hệ Phòng Đào tạo để được hướng dẫn chi tiết."
+                ),
+                "data": {"total_matches": 0},
+                "provenance": None,
+            }
+
+    # ----------------------------------------------------
+    # Nhánh C: Câu hỏi mơ hồ cần làm rõ (R5)
+    # ----------------------------------------------------
+    elif intent == INTENT_CLARIFY:
+        return {
+            "status": "needs_clarification",
+            "intent": intent,
+            "target_engine": target_engine,
+            "response_text": route_info.get(
+                "message",
+                "Chào bạn! Bạn cần H.E.R.M.E.S hỗ trợ về tính điểm GPA, lập lịch ôn thi hay tra cứu quy chế?",
+            ),
+            "data": {},
+            "provenance": None,
+        }
+
+    # ----------------------------------------------------
+    # Nhánh D: Trích xuất Deadline thông báo giảng viên (R4)
+    # ----------------------------------------------------
+    elif intent == INTENT_EXTRACT_DEADLINE:
+        from hermes.ai.client import extract_announcement_info
+
+        info = extract_announcement_info(clean_query)
+        info_dict = info.to_dict()
+        lines = [
+            "📅 Kết quả trích xuất thông tin Deadline / Bài tập:",
+            f"  • Môn học:           {info.course_name}",
+            f"  • Nội dung bài tập:  {info.assignment_content}",
+            f"  • Hạn chót (Deadline): {info.deadline}",
+            f"  • Hình thức nộp:     {info.submission_format}",
+            f"  • Yêu cầu khác:      {info.other_requirements}",
+        ]
+        return {
+            "status": "success",
+            "intent": intent,
+            "target_engine": target_engine,
+            "response_text": "\n".join(lines),
+            "data": info_dict,
+            "provenance": "H.E.R.M.E.S AI Announcement Extractor (R4)",
+        }
+
+    # ----------------------------------------------------
+    # Nhánh E: Các tác vụ khác / Fallback
+    # ----------------------------------------------------
+    else:
+        return {
+            "status": "success",
+            "intent": intent,
+            "target_engine": target_engine,
+            "response_text": route_info.get("message", "Yêu cầu đã được tiếp nhận."),
+            "data": extracted,
+            "provenance": None,
+        }

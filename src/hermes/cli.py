@@ -1,12 +1,22 @@
+import sys
 import click
 from rich.console import Console
 from rich.table import Table
 
-from hermes.engines.academic_calc import calculate_gpa, check_academic_warning
+from hermes.engines.academic_calc import (
+    calculate_gpa_10,
+    calculate_gpa_4,
+    check_academic_warning,
+)
 from hermes.engines.scheduler import generate_study_plan
-from hermes.security.guardrails import sanitize_input
 
-console = Console()
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+
+console = Console(legacy_windows=False)
 
 
 @click.group()
@@ -43,15 +53,29 @@ def gpa(grades, total_credits):
         console.print("[yellow]No grades provided. Use -g <grade> <credits>[/yellow]")
         return
 
-    gpa_val = calculate_gpa(list(grades))
-    console.print(f"Calculated GPA: [bold green]{gpa_val}[/bold green]")
+    grades_list = list(grades)
+    gpa_10 = calculate_gpa_10(grades_list)
+    gpa_4 = calculate_gpa_4(grades_list)
+    console.print(
+        f"Calculated GPA: [bold green]{gpa_10:.2f}[/bold green] (Scale 10) | "
+        f"[bold cyan]{gpa_4:.2f}[/bold cyan] (Scale 4)"
+    )
 
     if total_credits > 0:
-        warning_info = check_academic_warning(gpa_val, total_credits)
+        earned_credits = sum(c for g, c in grades_list if g >= 5.0)
+        warning_info = check_academic_warning(
+            current_semester_earned_credits=earned_credits,
+            accumulated_credits=max(total_credits, earned_credits),
+            previous_semester_gpa=gpa_10,
+            two_previous_semesters_gpa=gpa_10,
+        )
         status_color = "red" if warning_info["is_warning"] else "green"
         console.print(
             f"Academic Status: [bold {status_color}]{warning_info['status']}[/bold {status_color}]"
         )
+        if warning_info.get("reasons"):
+            for reason in warning_info["reasons"]:
+                console.print(f"  [yellow]• {reason}[/yellow]")
 
 
 @cli.command()
@@ -87,12 +111,19 @@ def plan(subject, hours, days):
 
     table = Table(title=f"Study Plan for Next {days} Days ({hours} hrs/day)")
     table.add_column("Subject", style="cyan")
+    table.add_column("Credits", justify="right", style="white")
+    table.add_column("Priority", justify="right", style="yellow")
     table.add_column("Total Hours Allocated", justify="right", style="magenta")
     table.add_column("Daily Hours", justify="right", style="green")
 
     for item in schedule:
+        subj_name = item.get("name") or item.get("subject", "Unknown")
         table.add_row(
-            item["subject"], str(item["allocated_hours"]), str(item["daily_hours"])
+            str(subj_name),
+            str(item.get("credits", "")),
+            str(item.get("priority", "")),
+            str(item["allocated_hours"]),
+            str(item["daily_hours"]),
         )
 
     console.print(table)
@@ -101,16 +132,22 @@ def plan(subject, hours, days):
 @cli.command()
 @click.argument("query")
 def ask(query):
-    """Ask H.E.R.M.E.S a question (routes via guardrails)."""
-    is_safe, msg = sanitize_input(query)
-    if not is_safe:
-        console.print(f"[bold red]Security Block:[/bold red] {msg}")
-        return
+    """Hỏi H.E.R.M.E.S bất kỳ câu hỏi nào (Tự động quét an toàn và điều phối)."""
+    from hermes.router.orchestrator import orchestrate
 
-    console.print(f"[green]Processing safe query:[/green] {query}")
-    console.print(
-        "[italic yellow](Routing to LLM/RAG engines not fully implemented yet.)[/italic yellow]"
-    )
+    res = orchestrate(query)
+    if res["status"] == "blocked":
+        console.print(f"[bold red]⛔ Bị chặn:[/bold red] {res['response_text']}")
+    elif res["status"] == "needs_clarification":
+        console.print(
+            f"[bold yellow]❓ Cần làm rõ:[/bold yellow] {res['response_text']}"
+        )
+    else:
+        console.print(
+            f"[bold green]🤖 H.E.R.M.E.S Phản hồi:[/bold green]\n{res['response_text']}"
+        )
+        if res.get("provenance"):
+            console.print(f"\n[italic cyan]📌 Nguồn: {res['provenance']}[/italic cyan]")
 
 
 if __name__ == "__main__":
