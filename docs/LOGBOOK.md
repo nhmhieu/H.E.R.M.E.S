@@ -3,7 +3,7 @@
 | Week | Member | Role | Assigned Tasks | Completed PRs | Blockers | Lessons Learned |
 |---|---|---|---|---|---|---|
 | Week 1 | Member 1 | Team Leader & Orchestration Lead | | | | |
-| Week 1 | Member 2 | Deterministic Algorithms Lead | | | | |
+| Week 1 | Member 2 | Deterministic Algorithms Lead |look up for gpa calculating, academic warning and unit tests|GPA and academic warning functions completed |finding source for task |ask AI agent for help about search up key word |
 | Week 1 | Member 3 | Data & RAG Lead | | | | |
 | Week 1 | Member 4 | AI & Safety Lead | | | | |
 | Week 1 | Member 5 | Interface & QA/Evaluation Lead | | | | |
