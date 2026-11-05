@@ -128,7 +128,7 @@ def main() -> None:
         """
         <div class="hermes-hero">
             <h1>🎓 H.E.R.M.E.S — Trợ lý & Cố vấn Học vụ Thông minh HCMUS</h1>
-            <p>HCMUS Educational Resource & Mentoring Expert System • Khoa CNTT, Trường ĐH Khoa học Tự nhiên (ĐHQG-HCM)</p>
+            <p>HCMUS Educational Resource & Mentoring Expert System • Khoa CNTT, ĐH KHTN (ĐHQG-HCM)</p>
             <div class="hermes-badges">
                 <span class="hermes-badge">🟢 Hybrid Architecture Ready</span>
                 <span class="hermes-badge">📚 17 Văn bản Pháp quy HCMUS</span>
