@@ -313,6 +313,21 @@ def _get_retriever():
     return _RETRIEVER_INSTANCE
 
 
+def _classify_academic_rank(gpa_10: float) -> str:
+    """Phân loại học lực theo thang điểm 10 chuẩn HCMUS."""
+    if gpa_10 >= 9.0:
+        return "Xuất sắc 🌟"
+    if gpa_10 >= 8.0:
+        return "Giỏi 🏆"
+    if gpa_10 >= 7.0:
+        return "Khá 👍"
+    if gpa_10 >= 6.0:
+        return "Trung bình khá 📈"
+    if gpa_10 >= 5.0:
+        return "Trung bình ⚠️"
+    return "Yếu / Nguy cơ cảnh báo 🚨"
+
+
 def orchestrate(query: str, session_id: str = "default_user") -> Dict[str, Any]:
     """
     Master Pipeline điều phối toàn bộ hệ thống H.E.R.M.E.S.
@@ -320,27 +335,42 @@ def orchestrate(query: str, session_id: str = "default_user") -> Dict[str, Any]:
     Quy trình:
     1. Quét an toàn qua Guardrails (R7)
     2. Phân loại ý định qua Router 2 tầng (R5)
-    3. Điều hướng xử lý sang GPA Engine (R2) hoặc RAG Quy chế (R3)
-    4. Định dạng và đóng gói kết quả chuẩn trả về cho Giao diện UI/CLI (R6)
+    3. Điều hướng xử lý sang GPA Engine (R2), Scheduler (R2), RAG Quy chế (R3) hoặc AI (R4)
+    4. Định dạng câu trả lời thân thiện, chuyên nghiệp cho Giao diện UI/CLI (R6)
     """
     from hermes.security.guardrails import validate_and_clean
     from hermes.engines.academic_calc import (
         calculate_gpa_10,
         calculate_gpa_4,
+        check_academic_warning,
         convert_score_to_4_and_letter,
     )
 
     # 1. Quét an toàn đầu vào (R7)
     guard_res = validate_and_clean(query)
     if not guard_res.allowed:
+        if guard_res.category == "academic_integrity":
+            friendly_reject = (
+                "🛡️ **Chính sách Liêm chính Học thuật (Academic Integrity)**\n\n"
+                "Mình rất tiếc không thể giải trực tiếp bài tập hoặc viết code làm hộ đồ án được "
+                f"(*Lý do: {guard_res.reason}*).\n\n"
+                "💡 **Gợi ý từ H.E.R.M.E.S:** Dù không thể làm bài giúp bạn, mình luôn sẵn sàng hỗ trợ:\n"
+                "- 📅 **Chia nhỏ lộ trình ôn tập & làm đồ án** theo thuật toán ưu tiên hạn chót (EDF).\n"
+                "- 📥 **Bóc tách yêu cầu & hạn nộp (Deadline)** từ thông báo của giảng viên.\n"
+                "- 🎯 **Tính điểm mục tiêu (What-If GPA)** để biết môn này cần đạt tối thiểu bao nhiêu điểm!"
+            )
+        else:
+            friendly_reject = (
+                "🛡️ **Hệ thống Bảo vệ An toàn H.E.R.M.E.S (Guardrails)**\n\n"
+                f"Yêu cầu bị từ chối: {guard_res.reason}.\n\n"
+                "💡 Bạn vui lòng đặt các câu hỏi liên quan đến **Quy chế học vụ HCMUS**, "
+                "**Chuẩn đầu ra ngoại ngữ**, **Tính điểm GPA** hoặc **Lập lịch ôn thi** nhé!"
+            )
         return {
             "status": "blocked",
             "intent": INTENT_REJECT,
             "target_engine": "guardrails",
-            "response_text": (
-                f"Yêu cầu bị từ chối: {guard_res.reason} "
-                "(H.E.R.M.E.S không hỗ trợ giải bài tập hoặc xử lý câu lệnh bất thường)."
-            ),
+            "response_text": friendly_reject,
             "data": {"category": guard_res.category},
             "provenance": None,
         }
@@ -363,17 +393,50 @@ def orchestrate(query: str, session_id: str = "default_user") -> Dict[str, Any]:
             grade_tuples = [(g["grade"], g["credits"]) for g in grades]
             gpa_10 = calculate_gpa_10(grade_tuples)
             gpa_4 = calculate_gpa_4(grade_tuples)
+            total_tc = sum(g["credits"] for g in grades)
+            passed_tc = sum(g["credits"] for g in grades if g["grade"] >= 5.0)
+            rank_label = _classify_academic_rank(gpa_10)
+
+            warn_info = check_academic_warning(
+                current_semester_earned_credits=passed_tc,
+                accumulated_credits=max(total_tc, 15),
+                previous_semester_gpa=gpa_10,
+                two_previous_semesters_gpa=gpa_10,
+            )
 
             lines = [
-                f"📊 Kết quả tính điểm học vụ ({len(grades)} môn học):",
-                f"  • Điểm trung bình tích lũy hệ 10: {gpa_10:.2f}",
-                f"  • Điểm trung bình tích lũy hệ 4:  {gpa_4:.2f}",
-                "\nChi tiết từng môn:",
+                f"🎓 **Kết quả Phân tích Điểm Học vụ ({len(grades)} học phần • Tổng {total_tc} tín chỉ)**\n",
+                f"- **Điểm trung bình Hệ 10:** `{gpa_10:.2f} / 10.0`",
+                f"- **Điểm trung bình Hệ 4:** `{gpa_4:.2f} / 4.0`",
+                f"- **Xếp loại học lực dự kiến:** **{rank_label}**",
+                f"- **Tín chỉ tích lũy đạt:** `{passed_tc}/{total_tc} TC`\n",
+                "| Môn học / Học phần | Số tín chỉ | Điểm hệ 10 | Điểm hệ 4 | Điểm chữ | Kết quả |",
+                "| :--- | :---: | :---: | :---: | :---: | :---: |",
             ]
             for g in grades:
-                _, letter = convert_score_to_4_and_letter(g["grade"])
+                s4, letter = convert_score_to_4_and_letter(g["grade"])
+                status_icon = "✅ Đạt" if g["grade"] >= 5.0 else "⚠️ Học lại"
                 lines.append(
-                    f"  - {g['subject']}: {g['grade']} ({g['credits']} tín chỉ) -> Điểm chữ: {letter}"
+                    f"| **{g['subject']}** | {g['credits']} TC | `{g['grade']:.1f}` "
+                    f"| `{s4:.1f}` | **{letter}** | {status_icon} |"
+                )
+
+            if warn_info["is_warning"]:
+                lines.append(
+                    f"\n⚠️ **Cảnh báo từ Cố vấn Học tập (Điều 16 - QĐ 1175):** "
+                    f"Hiện tại bảng điểm của bạn có nguy cơ rơi vào diện **{warn_info['status']}** "
+                    f"({'; '.join(warn_info['reasons'])}). Bạn nên ưu tiên đăng ký trả nợ các môn "
+                    "dưới 5.0 và dùng tab **Mô phỏng Điểm mục tiêu (What-If GPA)** để lên kế hoạch kéo điểm nhé!"
+                )
+            elif gpa_10 >= 8.0:
+                lines.append(
+                    "\n💡 **Nhận xét từ H.E.R.M.E.S:** Kết quả học tập của bạn rất ấn tượng! "
+                    "Hãy duy trì phong độ này để đủ điều kiện xét **Học bổng Khuyến khích Học tập** của trường nhé."
+                )
+            else:
+                lines.append(
+                    "\n💡 **Gợi ý từ H.E.R.M.E.S:** Trạng thái học vụ của bạn hoàn toàn **Bình thường (An toàn)**. "
+                    "Nếu muốn nhắm tới mức GPA Giỏi (8.0+), bạn có thể thử công cụ **Dự báo What-If GPA** ở Tab 2 nhé!"
                 )
 
             return {
@@ -382,7 +445,7 @@ def orchestrate(query: str, session_id: str = "default_user") -> Dict[str, Any]:
                 "target_engine": target_engine,
                 "response_text": "\n".join(lines),
                 "data": {"gpa_10": gpa_10, "gpa_4": gpa_4, "grades": grades},
-                "provenance": "Quy chế Đào tạo tín chỉ Trường ĐH Khoa học Tự nhiên, ĐHQG-HCM",
+                "provenance": "Quy chế Đào tạo tín chỉ Trường ĐH Khoa học Tự nhiên, ĐHQG-HCM (QĐ 1175/QĐ-KHTN)",
             }
         else:
             return {
@@ -390,9 +453,15 @@ def orchestrate(query: str, session_id: str = "default_user") -> Dict[str, Any]:
                 "intent": intent,
                 "target_engine": target_engine,
                 "response_text": (
-                    "Bạn muốn tính điểm GPA hoặc kiểm tra cảnh báo học vụ? "
-                    "Vui lòng cung cấp danh sách điểm theo định dạng: "
-                    "Tên môn (Điểm, Số tín chỉ), ví dụ: Giải tích 1 (8.0, 4TC) và C++ (7.5, 3 tín)."
+                    "Chào bạn! Mình sẵn sàng tính **GPA Hệ 10, Hệ 4** và kiểm tra "
+                    "**nguy cơ Cảnh báo học vụ (Điều 16)** giúp bạn ngay.\n\n"
+                    "✍️ **Cách nhập nhanh trong khung chat:** Bạn hãy nhắn danh sách môn kèm điểm "
+                    "và số tín chỉ theo mẫu:\n"
+                    "- *Ví dụ 1:* `Tính GPA giúp mình: Giải tích 1 (8.5, 4TC), "
+                    "Cấu trúc dữ liệu (7.5, 4 tín), Pháp luật (9.0, 2TC)`\n"
+                    "- *Ví dụ 2:* `Tính GPA: 8.0 (4TC), 7.5 (3TC), 6.5 (3TC)`\n\n"
+                    "👉 Hoặc bạn cũng có thể nhập trực tiếp từng môn ở bảng "
+                    "**📊 Tính điểm GPA & Học vụ** ngay thanh bên trái màn hình nhé!"
                 ),
                 "data": extracted,
                 "provenance": None,
@@ -417,25 +486,45 @@ def orchestrate(query: str, session_id: str = "default_user") -> Dict[str, Any]:
 
             citation = top_hit.get("trich_dan", "Sổ tay sinh viên HCMUS")
             pham_vi = top_hit.get("pham_vi", "")
-            content = top_hit.get("text", "")
-            display_text = content[:600] + ("..." if len(content) > 600 else "")
+            content = top_hit.get("text", "").strip()
+
+            lines = [
+                "👋 **Chào bạn! Dưới đây là thông tin quy chế chính thức từ "
+                "Trường ĐH Khoa học Tự nhiên (ĐHQG-HCM):**\n",
+                f"- 📄 **Văn bản pháp quy:** **{citation}**",
+            ]
+            if pham_vi:
+                lines.append(f"- 🎯 **Đối tượng / Phạm vi áp dụng:** `{pham_vi}`")
+
+            lines.append("\n#### 📖 Nội dung quy định chi tiết")
+            lines.append(f"> {content}")
 
             cert_dict = top_hit.get("chung_chi_toi_thieu")
             if cert_dict:
-                cert_lines = ["\n📌 Mức điểm chứng chỉ tối thiểu:"]
+                lines.append("\n#### 🏆 Bảng quy đổi Chứng chỉ Ngoại ngữ tối thiểu")
+                lines.append("| Loại Chứng chỉ / Bài thi | Mức điểm / Bậc tối thiểu yêu cầu |")
+                lines.append("| :--- | :--- |")
                 for cert_name, cert_val in cert_dict.items():
-                    cert_lines.append(f"  • {cert_name}: {cert_val}")
-                display_text = display_text + "\n" + "\n".join(cert_lines)
+                    lines.append(f"| **{cert_name}** | `{cert_val}` |")
 
-            header = f"📖 Theo quy định ({citation})"
-            if pham_vi:
-                header += f" [Phạm vi: {pham_vi}]"
+            other_hits = [h for h in hits if h is not top_hit][:2]
+            if other_hits:
+                lines.append("\n**🔎 Các điều khoản liên quan khác bạn có thể tham khảo:**")
+                for oh in other_hits:
+                    oh_cit = oh.get("trich_dan", "Quy chế HCMUS")
+                    oh_pv = f" (*{oh.get('pham_vi')}*)" if oh.get("pham_vi") else ""
+                    lines.append(f"- 📌 {oh_cit}{oh_pv}")
+
+            lines.append(
+                "\n💡 *Mẹo nhỏ: Nếu bạn muốn tra cứu riêng cho một khóa cụ thể (K21–K25) hoặc chương trình "
+                "(Hệ Chuẩn / Tăng cường Tiếng Anh / Tiên tiến), hãy ghi kèm tên khóa vào câu hỏi nhé!*"
+            )
 
             return {
                 "status": "success",
                 "intent": intent,
                 "target_engine": target_engine,
-                "response_text": f"{header}:\n\n{display_text}",
+                "response_text": "\n".join(lines),
                 "data": {"total_matches": len(hits), "top_hit": top_hit},
                 "provenance": citation,
             }
@@ -445,24 +534,35 @@ def orchestrate(query: str, session_id: str = "default_user") -> Dict[str, Any]:
                 "intent": intent,
                 "target_engine": target_engine,
                 "response_text": (
-                    "Hiện tại chưa tìm thấy điều khoản quy chế chính xác trong Sổ tay SV HCMUS "
-                    "cho câu hỏi này. Bạn vui lòng liên hệ Phòng Đào tạo để được hướng dẫn chi tiết."
+                    "Hiện tại mình chưa tìm thấy điều khoản quy chế khớp chính xác 100% với từ khóa này "
+                    "trong bộ 17 văn bản Sổ tay Sinh viên HCMUS.\n\n"
+                    "💡 **Gợi ý:** Bạn thử hỏi cụ thể hơn về **Chuẩn đầu ra ngoại ngữ (IELTS/TOEIC/VSTEP)**, "
+                    "**Cảnh báo học vụ (Điều 16)**, **Học cải thiện điểm**, hoặc **Điều kiện tốt nghiệp** nhé!"
                 ),
                 "data": {"total_matches": 0},
                 "provenance": None,
             }
 
     # ----------------------------------------------------
-    # Nhánh C: Câu hỏi mơ hồ cần làm rõ (R5)
+    # Nhánh C: Câu hỏi mơ hồ / Chào hỏi cần làm rõ (R5)
     # ----------------------------------------------------
     elif intent == INTENT_CLARIFY:
         return {
             "status": "needs_clarification",
             "intent": intent,
             "target_engine": target_engine,
-            "response_text": route_info.get(
-                "message",
-                "Chào bạn! Bạn cần H.E.R.M.E.S hỗ trợ về tính điểm GPA, lập lịch ôn thi hay tra cứu quy chế?",
+            "response_text": (
+                "👋 **Xin chào! Mình là H.E.R.M.E.S – Trợ lý Học vụ Thông minh dành cho sinh viên HCMUS.**\n\n"
+                "Mình có thể hỗ trợ bạn ngay 4 mảng công việc sau:\n"
+                "1. 📖 **Tra cứu Quy chế & Chuẩn Ngoại ngữ:** Hỏi đáp chính xác từ 17 văn bản pháp quy "
+                "(K21–K25, Chuẩn, TCTA, Tiên tiến).\n"
+                "2. 🧮 **Tính GPA Hệ 10 / Hệ 4 & Cảnh báo Học vụ:** Quy đổi điểm chuẩn Quyết định 1175 "
+                "và kiểm tra Điều 16.\n"
+                "3. 📅 **Lập lịch Ôn thi Tự động (EDF):** Phân bổ giờ học tối ưu theo hạn thi, "
+                "số tín chỉ và độ khó.\n"
+                "4. 📥 **Bóc tách Deadline Bài tập:** Trích xuất thông báo giảng viên từ Moodle "
+                "hoặc file lịch `.ics`.\n\n"
+                "💬 *Bạn đang cần mình giúp về phần nào? Cứ nhắn tự nhiên ở bên dưới nhé!*"
             ),
             "data": {},
             "provenance": None,
@@ -477,12 +577,16 @@ def orchestrate(query: str, session_id: str = "default_user") -> Dict[str, Any]:
         info = extract_announcement_info(clean_query)
         info_dict = info.to_dict()
         lines = [
-            "📅 Kết quả trích xuất thông tin Deadline / Bài tập:",
-            f"  • Môn học:           {info.course_name}",
-            f"  • Nội dung bài tập:  {info.assignment_content}",
-            f"  • Hạn chót (Deadline): {info.deadline}",
-            f"  • Hình thức nộp:     {info.submission_format}",
-            f"  • Yêu cầu khác:      {info.other_requirements}",
+            "📅 **Phiếu Tóm tắt Nhiệm vụ & Hạn nộp (Extracted Task Card)**\n",
+            "| Hạng mục | Nội dung trích xuất |",
+            "| :--- | :--- |",
+            f"| 📚 **Môn học** | **{info.course_name}** |",
+            f"| 📝 **Nội dung bài tập** | {info.assignment_content} |",
+            f"| ⏰ **Hạn chót (Deadline)** | `{info.deadline}` |",
+            f"| 📤 **Hình thức nộp bài** | {info.submission_format} |",
+            f"| ⚠️ **Lưu ý / Yêu cầu khác** | {info.other_requirements} |",
+            "\n💡 *Lời khuyên: Bạn nên hoàn thành và nộp bài lên Moodle trước hạn chót "
+            "ít nhất 2 tiếng để tránh nghẽn mạng nhé!*",
         ]
         return {
             "status": "success",
@@ -494,8 +598,46 @@ def orchestrate(query: str, session_id: str = "default_user") -> Dict[str, Any]:
         }
 
     # ----------------------------------------------------
-    # Nhánh E: Các tác vụ khác / Fallback
+    # Nhánh E: Lập lịch ôn tập (INTENT_SCHEDULING) & Fallback
     # ----------------------------------------------------
+    elif intent == INTENT_SCHEDULING:
+        from hermes.engines.scheduler import generate_study_plan
+
+        default_subjects = [
+            {"name": "Toán Rời Rạc", "credits": 4, "priority": 3},
+            {"name": "Cấu Trúc Dữ Liệu & Giải Thuật", "credits": 4, "priority": 2},
+            {"name": "Kiến Trúc Máy Tính", "credits": 3, "priority": 1},
+        ]
+        sample_plan = generate_study_plan(
+            default_subjects, available_hours_per_day=6.0, days_remaining=10
+        )
+        lines = [
+            "🗓️ **Kế hoạch Phân bổ Thời gian Ôn thi Gợi ý (Thuật toán EDF + Trọng số Tín chỉ)**\n",
+            "Dựa trên nguyên tắc ưu tiên môn có **tín chỉ lớn** và **mức độ ưu tiên/độ khó cao**, "
+            "dưới đây là lộ trình mẫu cho **10 ngày ôn tập (6 giờ/ngày = 60 giờ)**:\n",
+            "| Môn học | Tín chỉ | Độ ưu tiên | Tổng giờ ôn tập | Thời lượng mỗi ngày | Khuyến nghị |",
+            "| :--- | :---: | :---: | :---: | :---: | :--- |",
+        ]
+        for item in sample_plan:
+            lines.append(
+                f"| **{item['subject']}** | {item['credits']} TC | Mức {item['priority']} "
+                f"| **{item['total_allocated_hours']} giờ** | `{item['daily_hours']} giờ/ngày` "
+                f"| {item['recommendation']} |"
+            )
+        lines.append(
+            "\n👉 **Tùy chỉnh theo lịch thi của riêng bạn:** Bạn hãy bấm sang tab "
+            "**📅 Lập lịch Ôn thi & Dự báo GPA** ở phía trên để tự thêm môn học, ngày thi "
+            "và kéo thanh trượt điều chỉnh số giờ rảnh mỗi ngày nhé!"
+        )
+        return {
+            "status": "success",
+            "intent": intent,
+            "target_engine": target_engine,
+            "response_text": "\n".join(lines),
+            "data": {"sample_plan": sample_plan},
+            "provenance": "H.E.R.M.E.S Deterministic EDF Study Scheduler (R2)",
+        }
+
     else:
         return {
             "status": "success",
