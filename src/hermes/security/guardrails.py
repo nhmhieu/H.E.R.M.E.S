@@ -22,8 +22,11 @@ from typing import Any, Iterator
 import unicodedata
 import urllib.error
 import urllib.parse
+import weakref
 
 DEFAULT_MAX_INPUT_LENGTH = 1000
+MAX_INPUT_HARD_LIMIT = 20_000
+MAX_SYSTEM_INSTRUCTION_LENGTH = 8_192
 REDACTED_SECRET_PLACEHOLDER = "[REDACTED_SECRET]"
 
 # Scan-set flags: which regex family must run on a normalized text unit.
@@ -746,7 +749,7 @@ def _decode_payloads(text: str) -> list[str]:
             pass
 
     if "base64" in lower:
-        for match in re.finditer(r"[A-Za-z0-9+/]{8,}={0,2}", text):
+        for match in _BASE64_BLOB_RE.finditer(text):
             blob = match.group(0)
             try:
                 raw = base64.b64decode(blob + "=" * (-len(blob) % 4), validate=False)
@@ -757,7 +760,7 @@ def _decode_payloads(text: str) -> list[str]:
                 decoded.append(candidate)
 
     if "hex" in lower:
-        for match in re.finditer(r"(?:[0-9a-fA-F]{2}\s*){6,}", text):
+        for match in _HEX_BLOB_RE.finditer(text):
             try:
                 decoded.append(
                     bytes.fromhex(match.group(0).replace(" ", "")).decode(
@@ -767,7 +770,7 @@ def _decode_payloads(text: str) -> list[str]:
             except (ValueError, UnicodeError):
                 continue
 
-    if re.search(r"%[0-9a-fA-F]{2}", text):
+    if _URL_ENCODED_RE.search(text):
         try:
             decoded.append(urllib.parse.unquote(text))
         except (ValueError, UnicodeError):
@@ -796,13 +799,13 @@ def _build_detection_variants(text: str) -> list[str]:
         variants.add(_strip_diacritics(seed))
 
     leet: str | None = None
-    if re.search(r"[013457]", base):
+    if _LEET_WORD_SIGNAL_RE.search(base):
         leet = _leet_normalize(base)
         variants.add(leet)
         variants.add(_strip_diacritics(leet))
 
     homoglyph: str | None = None
-    if re.search(r"[^\x00-\x7f]", base):
+    if _NON_LATIN_SCRIPT_RE.search(base):
         homoglyph = _homoglyph_normalize(base)
         variants.add(homoglyph)
         variants.add(_strip_diacritics(homoglyph))
@@ -815,8 +818,8 @@ def _build_detection_variants(text: str) -> list[str]:
             variants.add(combined)
             variants.add(_strip_diacritics(combined))
 
-    if re.search(r"[\\/|]", base):
-        slashed = re.sub(r"[\\/|]+", " ", base)
+    if _SLASH_SEPARATOR_RE.search(base):
+        slashed = _SLASH_SEPARATOR_RE.sub(" ", base)
         variants.add(slashed)
         variants.add(_strip_diacritics(slashed))
 
@@ -837,7 +840,7 @@ def _build_detection_variants(text: str) -> list[str]:
         variants.add(_collapse_spaced_letters(payload_base))
         variants.add(_strip_diacritics(_collapse_spaced_letters(payload_base)))
 
-    if re.search(r"(?:backwards|reverse|ngược|đảo\s+ngược)", base):
+    if _REVERSE_MARKER_RE.search(base):
         reversed_full = base[::-1]
         variants.add(reversed_full)
         variants.add(_strip_diacritics(reversed_full))
@@ -896,6 +899,7 @@ _REPEATED_ANY_RE = re.compile(r"(.)\1{9,}")
 _TWO_PLUS_ALPHA_WORDS_RE = re.compile(r"[^\W\d_]{2,}")
 _ASCII_CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 _LEET_SIGNAL_RE = re.compile(r"[013457]")
+_LEET_WORD_SIGNAL_RE = re.compile(r"[a-z][013457]|[013457][a-z]")
 _NON_LATIN_SCRIPT_RE = re.compile(
     r"[\u0370-\u052F\u0590-\u06FF\u0900-\u097F\u0E00-\u0E7F"
     r"\u1100-\u11FF\u3040-\u30FF\u3130-\u318F\u3400-\u4DBF"
@@ -905,6 +909,17 @@ _ENCODING_MARKER_RE = re.compile(r"(?:base64|rot13|hex|%[0-9a-fA-F]{2})")
 _REVERSE_MARKER_RE = re.compile(r"(?:backwards|reverse|ngược|đảo\s+ngược)")
 _PUNCT_LETTER_PAIR_RE = re.compile(r"[^\W\d_][._\-/~*|\\][^\W\d_]")
 _SPACED_PUNCT_SEPARATOR_RE = re.compile(r"[^\W\d_]\s+[._\-/~*|\\]\s+[^\W\d_]")
+_SEPARATOR_OBFUSCATION_RE = re.compile(
+    r"(?:[^\W\d_][._\-/~*|\\][^\W\d_]" r"|[^\W\d_]\s+[._\-/~*|\\]\s+[^\W\d_])"
+)
+_SLASH_SEPARATOR_RE = re.compile(r"[\\/|]+")
+_BASE64_BLOB_RE = re.compile(r"[A-Za-z0-9+/]{8,}={0,2}")
+_HEX_BLOB_RE = re.compile(r"(?:[0-9a-fA-F]{2}\s*){6,}")
+_URL_ENCODED_RE = re.compile(r"%[0-9a-fA-F]{2}")
+_URL_SCHEME_RE = re.compile(r"\b[a-zA-Z][a-zA-Z0-9+.\-]*://[^\s]+")
+_DIGIT_RE = re.compile(r"\d")
+_ALNUM_RE = re.compile(r"[^\W_]")
+_ALLOWED_WHITESPACE_RE = re.compile(r"[\t\n\r]")
 
 
 try:  # Python exposes the regex parser under a private but stable name.
@@ -1171,6 +1186,90 @@ _POLICY_ANCHORS, _POLICY_ALWAYS_SLOW = _derive_family_anchors(
 )
 
 
+@dataclass(frozen=True)
+class _GatedPattern:
+    """A compiled pattern plus a safe anchor gate for the optimized path."""
+
+    regex: re.Pattern[str]
+    anchors: frozenset[str] | None
+
+
+def _compile_gated_patterns(
+    patterns: list[str],
+    *,
+    fold: bool = False,
+) -> tuple[_GatedPattern, ...]:
+    """
+    Compile patterns individually and attach a necessary-literal anchor set.
+
+    ``anchors is None`` means the pattern has no safe anchor and must always be
+    evaluated. For all other patterns, every match is guaranteed to contain at
+    least one anchor, so a missing anchor lets the scanner skip it safely.
+    """
+    compiled: list[_GatedPattern] = []
+    for pattern in patterns:
+        effective = _fold_pattern(pattern) if fold else pattern
+        anchors: frozenset[str] | None = None
+        if _REGEX_PARSER_AVAILABLE:
+            try:
+                candidate = _analyze_anchor_node(_re_parser.parse(effective, 0))
+            except (re.error, ValueError):  # pragma: no cover - defensive.
+                candidate = None
+            if candidate:
+                anchors = frozenset(candidate)
+        compiled.append(
+            _GatedPattern(
+                regex=re.compile(f"(?:{effective})"),
+                anchors=anchors,
+            )
+        )
+    return tuple(compiled)
+
+
+_DIRECT_STD_GATED = _compile_gated_patterns(list(DIRECT_ANSWER_PATTERNS))
+_DIRECT_DEACC_GATED = _compile_gated_patterns(list(DIRECT_ANSWER_PATTERNS), fold=True)
+_FORBIDDEN_STD_GATED = _compile_gated_patterns(list(FORBIDDEN_HOMEWORK_PATTERNS))
+_FORBIDDEN_DEACC_GATED = _compile_gated_patterns(
+    list(FORBIDDEN_HOMEWORK_PATTERNS), fold=True
+)
+_EXTENDED_STD_GATED = _compile_gated_patterns(list(EXTENDED_HOMEWORK_PATTERNS))
+_EXTENDED_DEACC_GATED = _compile_gated_patterns(
+    list(EXTENDED_HOMEWORK_PATTERNS), fold=True
+)
+
+
+def _gated_search(text: str, patterns: tuple[_GatedPattern, ...]) -> bool:
+    """Search gated patterns, skipping those whose anchors are absent."""
+    anchor_text = " ".join(text.split())
+    for item in patterns:
+        if item.anchors is not None and not any(
+            anchor in anchor_text for anchor in item.anchors
+        ):
+            continue
+        if item.regex.search(text):
+            return True
+    return False
+
+
+def _gated_affirmative_homework(
+    text: str,
+    patterns: tuple[_GatedPattern, ...],
+    negation_re: re.Pattern[str],
+) -> bool:
+    """Gated equivalent of ``_has_affirmative_forbidden_homework``."""
+    anchor_text = " ".join(text.split())
+    for item in patterns:
+        if item.anchors is not None and not any(
+            anchor in anchor_text for anchor in item.anchors
+        ):
+            continue
+        for match in item.regex.finditer(text):
+            prefix = text[max(0, match.start() - 35) : match.start()]
+            if not negation_re.search(prefix):
+                return True
+    return False
+
+
 def _anchor_hit(anchors: set[str], folded: str) -> bool:
     """
     Return True if any derived anchor occurs in ``folded``.
@@ -1195,10 +1294,11 @@ def _has_obfuscation_signal(base: str) -> bool:
             base
         ) or _PUNCT_SEPARATED_LETTERS_RE.search(base):
             return True
-    if _PUNCT_LETTER_PAIR_RE.search(base) or _SPACED_PUNCT_SEPARATOR_RE.search(base):
-        return True
+    if any(sep in base for sep in (".", "_", "-", "/", "~", "*", "|", "\\")):
+        if _SEPARATOR_OBFUSCATION_RE.search(base):
+            return True
     if (
-        _LEET_SIGNAL_RE.search(base)
+        _LEET_WORD_SIGNAL_RE.search(base)
         or _ENCODING_MARKER_RE.search(base)
         or _REVERSE_MARKER_RE.search(base)
         or _NON_LATIN_SCRIPT_RE.search(base)
@@ -1226,6 +1326,10 @@ def _build_scan_units(
     text: str,
     use_fast_fold: bool = True,
     include_compact: bool = True,
+    *,
+    precomputed_base: str | None = None,
+    precomputed_folded: str | None = None,
+    obfuscation_signal: bool | None = None,
 ) -> dict[str, int]:
     """
     Build the deduplicated ``(text, scan flags)`` view of an input.
@@ -1239,12 +1343,33 @@ def _build_scan_units(
     while the compacted base string itself is already present as a ``_STD`` unit
     for the policy scanner. This avoids redundant work without changing any
     decision.
+
+    When the input has no obfuscation signal, the fast path avoids the expensive
+    spaced-letter/compact/leet/decode/reverse expansions entirely. Those
+    transformations are provably no-ops for such text, so the resulting units
+    and detection decisions are unchanged.
     """
     fold = _fold_text if use_fast_fold else _strip_diacritics
 
-    compat = unicodedata.normalize("NFKC", text)
-    no_zw = "".join(ch for ch in compat if ch not in ZERO_WIDTH_CHARS)
-    base = " ".join(no_zw.lower().split())
+    if precomputed_base is None:
+        compat = unicodedata.normalize("NFKC", text)
+        no_zw = "".join(ch for ch in compat if ch not in ZERO_WIDTH_CHARS)
+        base = " ".join(no_zw.lower().split())
+    else:
+        base = precomputed_base
+
+    if not base:
+        return {}
+
+    if obfuscation_signal is None:
+        obfuscation_signal = _has_obfuscation_signal(base)
+
+    if not obfuscation_signal:
+        folded = precomputed_folded if precomputed_folded is not None else fold(base)
+        units: dict[str, int] = {base: _STD}
+        if folded:
+            units[folded] = units.get(folded, 0) | _DEACC
+        return units
 
     texts: set[str] = {base}
     texts.add(_collapse_spaced_letters(base))
@@ -1254,13 +1379,13 @@ def _build_scan_units(
         texts.add(fold(seed))
 
     leet: str | None = None
-    if re.search(r"[013457]", base):
+    if _LEET_WORD_SIGNAL_RE.search(base):
         leet = _leet_normalize(base)
         texts.add(leet)
         texts.add(fold(leet))
 
     homoglyph: str | None = None
-    if re.search(r"[^\x00-\x7f]", base):
+    if _NON_LATIN_SCRIPT_RE.search(base):
         homoglyph = _homoglyph_normalize(base)
         texts.add(homoglyph)
         texts.add(fold(homoglyph))
@@ -1273,8 +1398,8 @@ def _build_scan_units(
             texts.add(combined)
             texts.add(fold(combined))
 
-    if re.search(r"[\\/|]", base):
-        slashed = re.sub(r"[\\/|]+", " ", base)
+    if _SLASH_SEPARATOR_RE.search(base):
+        slashed = _SLASH_SEPARATOR_RE.sub(" ", base)
         texts.add(slashed)
         texts.add(fold(slashed))
 
@@ -1301,7 +1426,7 @@ def _build_scan_units(
         texts.add(reversed_full)
         texts.add(fold(reversed_full))
 
-    units: dict[str, int] = {}
+    units = {}
     for unit in texts:
         if not unit:
             continue
@@ -1337,9 +1462,9 @@ def _detect_injection_units(units: dict[str, int]) -> bool:
 def _detect_direct_answer_units(units: dict[str, int]) -> bool:
     """Scan deduplicated units for bare-answer requests (STD/DEACC only)."""
     for unit, flags in units.items():
-        if flags & _STD and _COMBINED_DIRECT_ANSWER_RE.search(unit):
+        if flags & _STD and _gated_search(unit, _DIRECT_STD_GATED):
             return True
-        if flags & _DEACC and _COMBINED_DEACC_DIRECT_ANSWER_RE.search(unit):
+        if flags & _DEACC and _gated_search(unit, _DIRECT_DEACC_GATED):
             return True
     return False
 
@@ -1347,25 +1472,29 @@ def _detect_direct_answer_units(units: dict[str, int]) -> bool:
 def _detect_homework_units(units: dict[str, int], has_learning_intent: bool) -> bool:
     """Scan deduplicated units for full-homework requests (STD/DEACC only)."""
     for unit, flags in units.items():
-        if flags & _STD and _has_affirmative_forbidden_homework(unit):
-            return True
-        if has_learning_intent:
-            continue
-        if flags & _DEACC and _has_affirmative_forbidden_homework(
+        if flags & _STD and _gated_affirmative_homework(
             unit,
-            _COMBINED_DEACC_FORBIDDEN_HOMEWORK_RE,
-            _NEGATED_HOMEWORK_PREFIX_DEACC_RE,
-        ):
-            return True
-        if flags & _STD and _has_affirmative_forbidden_homework(
-            unit,
-            _COMBINED_EXTENDED_HOMEWORK_RE,
+            _FORBIDDEN_STD_GATED,
             _NEGATED_HOMEWORK_PREFIX_RE,
         ):
             return True
-        if flags & _DEACC and _has_affirmative_forbidden_homework(
+        if has_learning_intent:
+            continue
+        if flags & _DEACC and _gated_affirmative_homework(
             unit,
-            _COMBINED_DEACC_EXTENDED_HOMEWORK_RE,
+            _FORBIDDEN_DEACC_GATED,
+            _NEGATED_HOMEWORK_PREFIX_DEACC_RE,
+        ):
+            return True
+        if flags & _STD and _gated_affirmative_homework(
+            unit,
+            _EXTENDED_STD_GATED,
+            _NEGATED_HOMEWORK_PREFIX_RE,
+        ):
+            return True
+        if flags & _DEACC and _gated_affirmative_homework(
+            unit,
+            _EXTENDED_DEACC_GATED,
             _NEGATED_HOMEWORK_PREFIX_DEACC_RE,
         ):
             return True
@@ -1419,7 +1548,11 @@ def _needs_redaction(text: str) -> bool:
         return True
     if "://" in lowered and "@" in lowered:
         return True
-    return any(pattern.search(text) for pattern in _PII_PATTERNS)
+    if "@" in text and _PII_EMAIL_RE.search(text):
+        return True
+    if _DIGIT_RE.search(text) is None:
+        return False
+    return any(pattern.search(text) for pattern in _PII_PATTERNS[1:])
 
 
 _CREDENTIAL_LABEL_WORDS = {
@@ -1474,13 +1607,13 @@ def _get_max_input_length(override_max_length: int | None = None) -> int:
             and not isinstance(override_max_length, bool)
             and override_max_length > 0
         ):
-            return override_max_length
+            return min(override_max_length, MAX_INPUT_HARD_LIMIT)
         return DEFAULT_MAX_INPUT_LENGTH
 
     raw_env = os.getenv("HERMES_MAX_INPUT_LENGTH", str(DEFAULT_MAX_INPUT_LENGTH))
     try:
         val = int(str(raw_env).strip())
-        return val if val > 0 else DEFAULT_MAX_INPUT_LENGTH
+        return min(val, MAX_INPUT_HARD_LIMIT) if val > 0 else DEFAULT_MAX_INPUT_LENGTH
     except (ValueError, TypeError):
         return DEFAULT_MAX_INPUT_LENGTH
 
@@ -1585,6 +1718,12 @@ def _has_hidden_or_control_chars_fast(text: str) -> bool:
     if text.isascii():
         return _ASCII_CONTROL_RE.search(text) is not None
 
+    # Common case: printable Unicode text (optionally containing normal
+    # newlines/tabs). ``str.isprintable`` is a C-level scan, avoiding a Python
+    # loop over every character for ordinary Vietnamese/English prose.
+    if text.isprintable() or _ALLOWED_WHITESPACE_RE.sub("", text).isprintable():
+        return False
+
     categories: dict[str, str] = {}
     for ch in text:
         if ch in ZERO_WIDTH_CHARS:
@@ -1608,7 +1747,7 @@ def _is_garbage_input(stripped: str) -> bool:
     Detect punctuation-only or meaningless repetitive noise while avoiding
     false positives on valid code identifiers, binary literals, or math formulas.
     """
-    if not any(ch.isalnum() for ch in stripped):
+    if _ALNUM_RE.search(stripped) is None:
         return True
 
     no_space = "".join(stripped.split()).lower()
@@ -1762,11 +1901,7 @@ def _has_meaningful_query_after_redaction(redacted_text: str) -> bool:
     Verify that after redacting secrets, the remaining text still contains a
     meaningful question or statement rather than only secret placeholders/labels.
     """
-    without_urls = re.sub(
-        r"\b[a-zA-Z][a-zA-Z0-9+.\-]*://[^\s]+",
-        " ",
-        redacted_text,
-    )
+    without_urls = _URL_SCHEME_RE.sub(" ", redacted_text)
     without_placeholders = without_urls.replace(REDACTED_SECRET_PLACEHOLDER, " ")
     word_tokens = [
         tok.lower()
@@ -1856,9 +1991,11 @@ def validate_and_clean(
 
     mask = _MASK_FULL
     folded = ""
+    obfuscation_signal = False
     if optimized:
         folded = _fold_text(plain_lower)
-        if _has_obfuscation_signal(plain_lower):
+        obfuscation_signal = _has_obfuscation_signal(plain_lower)
+        if obfuscation_signal:
             mask = _MASK_FULL
         elif use_gate:
             mask = _gate_mask(plain_lower, folded)
@@ -1869,6 +2006,9 @@ def validate_and_clean(
             stripped,
             use_fast_fold=use_micro,
             include_compact=bool(mask & _MASK_INJECTION),
+            precomputed_base=plain_lower,
+            precomputed_folded=folded if use_micro else None,
+            obfuscation_signal=obfuscation_signal,
         )
 
     variants: list[str] | None = None
@@ -2139,6 +2279,28 @@ def classify_ai_error(exc: BaseException) -> str:
             if isinstance(status_code, int) and 400 <= status_code <= 499:
                 return "invalid_response"
 
+        if module_name.startswith(("httpx", "httpcore", "requests", "urllib3")):
+            if "timeout" in cls_name.lower():
+                return "timeout"
+            if cls_name in {
+                "ConnectError",
+                "ConnectionError",
+                "ConnectTimeout",
+                "ReadError",
+                "ReadTimeout",
+                "WriteError",
+                "WriteTimeout",
+                "PoolTimeout",
+                "RemoteProtocolError",
+                "ProtocolError",
+                "ProxyError",
+                "NetworkError",
+                "NewConnectionError",
+                "NameResolutionError",
+                "MaxRetryError",
+            }:
+                return "network_error"
+
         if isinstance(item, (TimeoutError, socket.timeout)):
             return "timeout"
 
@@ -2369,8 +2531,11 @@ class _CircuitBreaker:
         self._lock = threading.Lock()
         self._failure_count = 0
         self._opened_until = 0.0
+        self._probe_in_flight = False
         self._last_category = "circuit_open"
         self._last_reason = "AI circuit breaker is open due to recent failures."
+        with _BREAKER_REGISTRY_LOCK:
+            _BREAKER_REGISTRY.add(self)
 
     @staticmethod
     def is_enabled() -> bool:
@@ -2386,6 +2551,14 @@ class _CircuitBreaker:
         with self._lock:
             if self._opened_until > now:
                 return False, self._last_category, self._last_reason
+            if self._opened_until:
+                if self._probe_in_flight:
+                    return (
+                        False,
+                        "circuit_open",
+                        "AI circuit breaker half-open probe is in progress.",
+                    )
+                self._probe_in_flight = True
             return True, "", ""
 
     def record_success(self) -> None:
@@ -2393,6 +2566,7 @@ class _CircuitBreaker:
         with self._lock:
             self._failure_count = 0
             self._opened_until = 0.0
+            self._probe_in_flight = False
 
     def record_failure(self, category: str, reason: str) -> None:
         """Record a failure and open the circuit at the configured threshold."""
@@ -2400,6 +2574,7 @@ class _CircuitBreaker:
             return
         now = time.monotonic()
         with self._lock:
+            self._probe_in_flight = False
             self._failure_count += 1
             self._last_category = category or "unknown_error"
             self._last_reason = reason or "AI service temporarily unavailable."
@@ -2411,15 +2586,22 @@ class _CircuitBreaker:
         with self._lock:
             self._failure_count = 0
             self._opened_until = 0.0
+            self._probe_in_flight = False
             self._last_category = "circuit_open"
             self._last_reason = "AI circuit breaker is open due to recent failures."
 
 
+_BREAKER_REGISTRY: weakref.WeakSet[_CircuitBreaker] = weakref.WeakSet()
+_BREAKER_REGISTRY_LOCK = threading.Lock()
 _GLOBAL_AI_CIRCUIT_BREAKER = _CircuitBreaker()
 
 
 def reset_ai_circuit_breaker() -> None:
-    """Reset the global AI circuit breaker (used by tests)."""
+    """Reset every live AI circuit breaker (used by tests and operators)."""
+    with _BREAKER_REGISTRY_LOCK:
+        breakers = list(_BREAKER_REGISTRY)
+    for breaker in breakers:
+        breaker.reset()
     _GLOBAL_AI_CIRCUIT_BREAKER.reset()
 
 
@@ -2450,10 +2632,16 @@ class SafeAIGateway:
         self._api_key = api_key
         self._model = model
         self._timeout = timeout
+        self._circuit_breaker = _CircuitBreaker()
         if use_circuit_breaker is None:
-            self._use_circuit_breaker = client is None
+            self._use_circuit_breaker = True
         else:
             self._use_circuit_breaker = bool(use_circuit_breaker)
+
+    @property
+    def circuit_breaker(self) -> "_CircuitBreaker":
+        """Expose this gateway's breaker for metrics, tests, and operators."""
+        return self._circuit_breaker
 
     def _resolve_client(self) -> Any:
         """Resolve an injected client or lazily import HermesAIClient."""
@@ -2508,12 +2696,15 @@ class SafeAIGateway:
         reason = override_reason or _redact_ai_error(str(exc))
 
         if self._use_circuit_breaker and override_category is None:
-            _GLOBAL_AI_CIRCUIT_BREAKER.record_failure(category, reason)
+            self._circuit_breaker.record_failure(category, reason)
 
         try:
             mock_resp = self.fallback_client.generate("")
-            fallback_text = getattr(mock_resp, "text", SAFE_FALLBACK_TEXT)
-            if not isinstance(fallback_text, str) or not fallback_text.strip():
+            raw_fallback_text = getattr(mock_resp, "text", SAFE_FALLBACK_TEXT)
+            fallback_text = sanitize_ai_output(
+                raw_fallback_text if isinstance(raw_fallback_text, str) else ""
+            )
+            if not fallback_text:
                 fallback_text = SAFE_FALLBACK_TEXT
             fallback_model = (
                 getattr(mock_resp, "model", FALLBACK_MODEL_NAME) or FALLBACK_MODEL_NAME
@@ -2564,12 +2755,40 @@ class SafeAIGateway:
                         "system_instruction must be a string when provided."
                     ),
                 )
-            safe_system_instruction = sanitize_ai_output(system_instruction)
+
+            try:
+                system_guard = validate_and_clean(
+                    system_instruction,
+                    max_length=MAX_SYSTEM_INSTRUCTION_LENGTH,
+                )
+            except Exception as exc:
+                return self._blocked_result(
+                    f"System instruction validation failed: {exc}",
+                    "system_instruction_blocked",
+                )
+
+            if not getattr(system_guard, "allowed", False):
+                return self._blocked_result(
+                    getattr(
+                        system_guard,
+                        "reason",
+                        "System instruction blocked by guardrails.",
+                    ),
+                    getattr(system_guard, "category", "")
+                    or "system_instruction_blocked",
+                )
+
+            safe_system_instruction = sanitize_ai_output(
+                getattr(system_guard, "cleaned_text", "")
+            )
+            if not safe_system_instruction:
+                return self._blocked_result(
+                    "System instruction is empty after sanitization.",
+                    "system_instruction_blocked",
+                )
 
         if self._use_circuit_breaker:
-            allowed_call, cb_category, cb_reason = (
-                _GLOBAL_AI_CIRCUIT_BREAKER.allow_request()
-            )
+            allowed_call, cb_category, cb_reason = self._circuit_breaker.allow_request()
             if not allowed_call:
                 return self._fallback(
                     RuntimeError(cb_reason),
@@ -2612,7 +2831,7 @@ class SafeAIGateway:
             )
 
             if self._use_circuit_breaker:
-                _GLOBAL_AI_CIRCUIT_BREAKER.record_success()
+                self._circuit_breaker.record_success()
 
             return SafeAIResult(
                 text=safe_text,
