@@ -302,6 +302,7 @@ def extract_grades_from_text(text: str) -> list[dict]:
 
 
 _RETRIEVER_INSTANCE = None
+_SESSION_MANAGER = None
 
 
 def _get_retriever():
@@ -311,6 +312,35 @@ def _get_retriever():
 
         _RETRIEVER_INSTANCE = KeywordRetriever()
     return _RETRIEVER_INSTANCE
+
+
+def get_session_manager():
+    """Return singleton SessionManager instance for multi-turn state tracking (R5)."""
+    global _SESSION_MANAGER
+    if _SESSION_MANAGER is None:
+        from hermes.router.session import SessionManager
+
+        _SESSION_MANAGER = SessionManager()
+    return _SESSION_MANAGER
+
+
+def _extract_student_context(text_lower: str) -> Dict[str, str]:
+    """Extract cohort (K20-K25) and program context from user query."""
+    ctx: Dict[str, str] = {}
+    cohort_match = re.search(r"\b(k2[0-5])\b", text_lower)
+    if cohort_match:
+        ctx["cohort"] = cohort_match.group(1).upper()
+    if (
+        "tăng cường tiếng anh" in text_lower
+        or "tcta" in text_lower
+        or "chất lượng cao" in text_lower
+    ):
+        ctx["program"] = "chương trình tăng cường tiếng Anh"
+    elif "tiên tiến" in text_lower or "apcs" in text_lower:
+        ctx["program"] = "chương trình tiên tiến"
+    elif "hệ chuẩn" in text_lower or "đại trà" in text_lower:
+        ctx["program"] = "hệ chuẩn"
+    return ctx
 
 
 def _classify_academic_rank(gpa_10: float) -> str:
@@ -334,10 +364,12 @@ def orchestrate(query: str, session_id: str = "default_user") -> Dict[str, Any]:
 
     Quy trình:
     1. Quét an toàn qua Guardrails (R7)
-    2. Phân loại ý định qua Router 2 tầng (R5)
-    3. Điều hướng xử lý sang GPA Engine (R2), Scheduler (R2), RAG Quy chế (R3) hoặc AI (R4)
-    4. Định dạng câu trả lời thân thiện, chuyên nghiệp cho Giao diện UI/CLI (R6)
+    2. Cập nhật và đồng bộ trạng thái hội thoại qua SessionManager (R5)
+    3. Phân loại ý định qua Router 2 tầng (R5)
+    4. Điều hướng xử lý sang GPA Engine (R2), Scheduler (R2), RAG Quy chế (R3) hoặc AI (R4)
+    5. Định dạng câu trả lời thân thiện, chuyên nghiệp cho Giao diện UI/CLI (R6)
     """
+    from hermes.router.session import DialogueState
     from hermes.security.guardrails import validate_and_clean
     from hermes.engines.academic_calc import (
         calculate_gpa_10,
@@ -345,6 +377,8 @@ def orchestrate(query: str, session_id: str = "default_user") -> Dict[str, Any]:
         check_academic_warning,
         convert_score_to_4_and_letter,
     )
+
+    session = get_session_manager().get_or_create(session_id)
 
     # 1. Quét an toàn đầu vào (R7)
     guard_res = validate_and_clean(query)
@@ -371,17 +405,34 @@ def orchestrate(query: str, session_id: str = "default_user") -> Dict[str, Any]:
             "intent": INTENT_REJECT,
             "target_engine": "guardrails",
             "response_text": friendly_reject,
-            "data": {"category": guard_res.category},
+            "data": {
+                "category": guard_res.category,
+                "session_state": session.state.value,
+            },
             "provenance": None,
         }
 
     clean_query = guard_res.cleaned_text
+    session.add_message("user", clean_query)
 
-    # 2. Phân loại ý định qua Router (R5)
+    # Lưu ngữ cảnh Khóa / Hệ đào tạo vào Session Slots nếu có
+    detected_ctx = _extract_student_context(clean_query.lower())
+    for k, v in detected_ctx.items():
+        session.fill_slot(k, v)
+
+    # 2. Phân loại ý định qua Router (R5) + Kế thừa trạng thái Session (Multi-turn)
     route_info = route_query(clean_query)
     intent = route_info["intent"]
     target_engine = route_info["target_engine"]
     extracted = route_info.get("extracted_params", {})
+
+    # Nếu lượt trước đang chờ nhập điểm (AWAITING_GRADES) và lượt này người dùng gửi điểm
+    if session.state == DialogueState.AWAITING_GRADES:
+        followup_grades = extract_grades_from_text(clean_query)
+        if followup_grades:
+            intent = INTENT_CALC_GPA
+            target_engine = "academic_engine"
+            extracted = {"grades": followup_grades, "raw_text": clean_query}
 
     # 3. Điều phối theo Intent
     # ----------------------------------------------------
@@ -390,6 +441,7 @@ def orchestrate(query: str, session_id: str = "default_user") -> Dict[str, Any]:
     if intent == INTENT_CALC_GPA:
         grades = extracted.get("grades", [])
         if grades:
+            session.set_state(DialogueState.IDLE, {"last_grades": grades})
             grade_tuples = [(g["grade"], g["credits"]) for g in grades]
             gpa_10 = calculate_gpa_10(grade_tuples)
             gpa_4 = calculate_gpa_4(grade_tuples)
@@ -439,31 +491,41 @@ def orchestrate(query: str, session_id: str = "default_user") -> Dict[str, Any]:
                     "Nếu muốn nhắm tới mức GPA Giỏi (8.0+), bạn có thể thử công cụ **Dự báo What-If GPA** ở Tab 2 nhé!"
                 )
 
+            resp_text = "\n".join(lines)
+            session.add_message("assistant", resp_text)
             return {
                 "status": "success",
                 "intent": intent,
                 "target_engine": target_engine,
-                "response_text": "\n".join(lines),
-                "data": {"gpa_10": gpa_10, "gpa_4": gpa_4, "grades": grades},
+                "response_text": resp_text,
+                "data": {
+                    "gpa_10": gpa_10,
+                    "gpa_4": gpa_4,
+                    "grades": grades,
+                    "session_state": session.state.value,
+                },
                 "provenance": "Quy chế Đào tạo tín chỉ Trường ĐH Khoa học Tự nhiên, ĐHQG-HCM (QĐ 1175/QĐ-KHTN)",
             }
         else:
+            session.set_state(DialogueState.AWAITING_GRADES)
+            resp_text = (
+                "Chào bạn! Mình sẵn sàng tính **GPA Hệ 10, Hệ 4** và kiểm tra "
+                "**nguy cơ Cảnh báo học vụ (Điều 16)** giúp bạn ngay.\n\n"
+                "✍️ **Cách nhập nhanh trong khung chat:** Bạn hãy nhắn danh sách môn kèm điểm "
+                "và số tín chỉ theo mẫu:\n"
+                "- *Ví dụ 1:* `Tính GPA giúp mình: Giải tích 1 (8.5, 4TC), "
+                "Cấu trúc dữ liệu (7.5, 4 tín), Pháp luật (9.0, 2TC)`\n"
+                "- *Ví dụ 2:* `Giải tích 1 (8.0, 4TC), C++ (7.5, 3TC)`\n\n"
+                "👉 Hoặc bạn cũng có thể nhập trực tiếp từng môn ở bảng "
+                "**📊 Tính điểm GPA & Học vụ** ngay thanh bên trái màn hình nhé!"
+            )
+            session.add_message("assistant", resp_text)
             return {
                 "status": "needs_info",
                 "intent": intent,
                 "target_engine": target_engine,
-                "response_text": (
-                    "Chào bạn! Mình sẵn sàng tính **GPA Hệ 10, Hệ 4** và kiểm tra "
-                    "**nguy cơ Cảnh báo học vụ (Điều 16)** giúp bạn ngay.\n\n"
-                    "✍️ **Cách nhập nhanh trong khung chat:** Bạn hãy nhắn danh sách môn kèm điểm "
-                    "và số tín chỉ theo mẫu:\n"
-                    "- *Ví dụ 1:* `Tính GPA giúp mình: Giải tích 1 (8.5, 4TC), "
-                    "Cấu trúc dữ liệu (7.5, 4 tín), Pháp luật (9.0, 2TC)`\n"
-                    "- *Ví dụ 2:* `Tính GPA: 8.0 (4TC), 7.5 (3TC), 6.5 (3TC)`\n\n"
-                    "👉 Hoặc bạn cũng có thể nhập trực tiếp từng môn ở bảng "
-                    "**📊 Tính điểm GPA & Học vụ** ngay thanh bên trái màn hình nhé!"
-                ),
-                "data": extracted,
+                "response_text": resp_text,
+                "data": {**extracted, "session_state": session.state.value},
                 "provenance": None,
             }
 
@@ -471,13 +533,18 @@ def orchestrate(query: str, session_id: str = "default_user") -> Dict[str, Any]:
     # Nhánh B: Tra cứu quy chế RAG (R3)
     # ----------------------------------------------------
     elif intent == INTENT_REGULATION_RAG:
+        session.set_state(DialogueState.IDLE)
+        effective_rag_query = clean_query
+        if "cohort" not in detected_ctx and session.get_slot("cohort"):
+            effective_rag_query = f"{clean_query} {session.get_slot('cohort')}"
+
         retriever = _get_retriever()
-        rag_res = retriever.search(clean_query, top_k=5)
+        rag_res = retriever.search(effective_rag_query, top_k=5)
         hits = rag_res.get("ket_qua", [])
 
         if hits:
             top_hit = hits[0]
-            q_lower = clean_query.lower()
+            q_lower = effective_rag_query.lower()
             if "hồ sơ" not in q_lower and "thủ tục" not in q_lower:
                 for h in hits:
                     if h.get("chung_chi_toi_thieu"):
@@ -502,14 +569,18 @@ def orchestrate(query: str, session_id: str = "default_user") -> Dict[str, Any]:
             cert_dict = top_hit.get("chung_chi_toi_thieu")
             if cert_dict:
                 lines.append("\n#### 🏆 Bảng quy đổi Chứng chỉ Ngoại ngữ tối thiểu")
-                lines.append("| Loại Chứng chỉ / Bài thi | Mức điểm / Bậc tối thiểu yêu cầu |")
+                lines.append(
+                    "| Loại Chứng chỉ / Bài thi | Mức điểm / Bậc tối thiểu yêu cầu |"
+                )
                 lines.append("| :--- | :--- |")
                 for cert_name, cert_val in cert_dict.items():
                     lines.append(f"| **{cert_name}** | `{cert_val}` |")
 
             other_hits = [h for h in hits if h is not top_hit][:2]
             if other_hits:
-                lines.append("\n**🔎 Các điều khoản liên quan khác bạn có thể tham khảo:**")
+                lines.append(
+                    "\n**🔎 Các điều khoản liên quan khác bạn có thể tham khảo:**"
+                )
                 for oh in other_hits:
                     oh_cit = oh.get("trich_dan", "Quy chế HCMUS")
                     oh_pv = f" (*{oh.get('pham_vi')}*)" if oh.get("pham_vi") else ""
@@ -520,26 +591,34 @@ def orchestrate(query: str, session_id: str = "default_user") -> Dict[str, Any]:
                 "(Hệ Chuẩn / Tăng cường Tiếng Anh / Tiên tiến), hãy ghi kèm tên khóa vào câu hỏi nhé!*"
             )
 
+            resp_text = "\n".join(lines)
+            session.add_message("assistant", resp_text)
             return {
                 "status": "success",
                 "intent": intent,
                 "target_engine": target_engine,
-                "response_text": "\n".join(lines),
-                "data": {"total_matches": len(hits), "top_hit": top_hit},
+                "response_text": resp_text,
+                "data": {
+                    "total_matches": len(hits),
+                    "top_hit": top_hit,
+                    "session_state": session.state.value,
+                },
                 "provenance": citation,
             }
         else:
+            resp_text = (
+                "Hiện tại mình chưa tìm thấy điều khoản quy chế khớp chính xác 100% với từ khóa này "
+                "trong bộ 17 văn bản Sổ tay Sinh viên HCMUS.\n\n"
+                "💡 **Gợi ý:** Bạn thử hỏi cụ thể hơn về **Chuẩn đầu ra ngoại ngữ (IELTS/TOEIC/VSTEP)**, "
+                "**Cảnh báo học vụ (Điều 16)**, **Học cải thiện điểm**, hoặc **Điều kiện tốt nghiệp** nhé!"
+            )
+            session.add_message("assistant", resp_text)
             return {
                 "status": "success",
                 "intent": intent,
                 "target_engine": target_engine,
-                "response_text": (
-                    "Hiện tại mình chưa tìm thấy điều khoản quy chế khớp chính xác 100% với từ khóa này "
-                    "trong bộ 17 văn bản Sổ tay Sinh viên HCMUS.\n\n"
-                    "💡 **Gợi ý:** Bạn thử hỏi cụ thể hơn về **Chuẩn đầu ra ngoại ngữ (IELTS/TOEIC/VSTEP)**, "
-                    "**Cảnh báo học vụ (Điều 16)**, **Học cải thiện điểm**, hoặc **Điều kiện tốt nghiệp** nhé!"
-                ),
-                "data": {"total_matches": 0},
+                "response_text": resp_text,
+                "data": {"total_matches": 0, "session_state": session.state.value},
                 "provenance": None,
             }
 
@@ -547,24 +626,27 @@ def orchestrate(query: str, session_id: str = "default_user") -> Dict[str, Any]:
     # Nhánh C: Câu hỏi mơ hồ / Chào hỏi cần làm rõ (R5)
     # ----------------------------------------------------
     elif intent == INTENT_CLARIFY:
+        session.set_state(DialogueState.AWAITING_CLARIFICATION)
+        resp_text = (
+            "👋 **Xin chào! Mình là H.E.R.M.E.S – Trợ lý Học vụ Thông minh dành cho sinh viên HCMUS.**\n\n"
+            "Mình có thể hỗ trợ bạn ngay 4 mảng công việc sau:\n"
+            "1. 📖 **Tra cứu Quy chế & Chuẩn Ngoại ngữ:** Hỏi đáp chính xác từ 17 văn bản pháp quy "
+            "(K21–K25, Chuẩn, TCTA, Tiên tiến).\n"
+            "2. 🧮 **Tính GPA Hệ 10 / Hệ 4 & Cảnh báo Học vụ:** Quy đổi điểm chuẩn Quyết định 1175 "
+            "và kiểm tra Điều 16.\n"
+            "3. 📅 **Lập lịch Ôn thi Tự động (EDF):** Phân bổ giờ học tối ưu theo hạn thi, "
+            "số tín chỉ và độ khó.\n"
+            "4. 📥 **Bóc tách Deadline Bài tập:** Trích xuất thông báo giảng viên từ Moodle "
+            "hoặc file lịch `.ics`.\n\n"
+            "💬 *Bạn đang cần mình giúp về phần nào? Cứ nhắn tự nhiên ở bên dưới nhé!*"
+        )
+        session.add_message("assistant", resp_text)
         return {
             "status": "needs_clarification",
             "intent": intent,
             "target_engine": target_engine,
-            "response_text": (
-                "👋 **Xin chào! Mình là H.E.R.M.E.S – Trợ lý Học vụ Thông minh dành cho sinh viên HCMUS.**\n\n"
-                "Mình có thể hỗ trợ bạn ngay 4 mảng công việc sau:\n"
-                "1. 📖 **Tra cứu Quy chế & Chuẩn Ngoại ngữ:** Hỏi đáp chính xác từ 17 văn bản pháp quy "
-                "(K21–K25, Chuẩn, TCTA, Tiên tiến).\n"
-                "2. 🧮 **Tính GPA Hệ 10 / Hệ 4 & Cảnh báo Học vụ:** Quy đổi điểm chuẩn Quyết định 1175 "
-                "và kiểm tra Điều 16.\n"
-                "3. 📅 **Lập lịch Ôn thi Tự động (EDF):** Phân bổ giờ học tối ưu theo hạn thi, "
-                "số tín chỉ và độ khó.\n"
-                "4. 📥 **Bóc tách Deadline Bài tập:** Trích xuất thông báo giảng viên từ Moodle "
-                "hoặc file lịch `.ics`.\n\n"
-                "💬 *Bạn đang cần mình giúp về phần nào? Cứ nhắn tự nhiên ở bên dưới nhé!*"
-            ),
-            "data": {},
+            "response_text": resp_text,
+            "data": {"session_state": session.state.value},
             "provenance": None,
         }
 
@@ -574,6 +656,7 @@ def orchestrate(query: str, session_id: str = "default_user") -> Dict[str, Any]:
     elif intent == INTENT_EXTRACT_DEADLINE:
         from hermes.ai.client import extract_announcement_info
 
+        session.set_state(DialogueState.IDLE)
         info = extract_announcement_info(clean_query)
         info_dict = info.to_dict()
         lines = [
@@ -588,12 +671,14 @@ def orchestrate(query: str, session_id: str = "default_user") -> Dict[str, Any]:
             "\n💡 *Lời khuyên: Bạn nên hoàn thành và nộp bài lên Moodle trước hạn chót "
             "ít nhất 2 tiếng để tránh nghẽn mạng nhé!*",
         ]
+        resp_text = "\n".join(lines)
+        session.add_message("assistant", resp_text)
         return {
             "status": "success",
             "intent": intent,
             "target_engine": target_engine,
-            "response_text": "\n".join(lines),
-            "data": info_dict,
+            "response_text": resp_text,
+            "data": {**info_dict, "session_state": session.state.value},
             "provenance": "H.E.R.M.E.S AI Announcement Extractor (R4)",
         }
 
@@ -603,6 +688,7 @@ def orchestrate(query: str, session_id: str = "default_user") -> Dict[str, Any]:
     elif intent == INTENT_SCHEDULING:
         from hermes.engines.scheduler import generate_study_plan
 
+        session.set_state(DialogueState.IDLE)
         default_subjects = [
             {"name": "Toán Rời Rạc", "credits": 4, "priority": 3},
             {"name": "Cấu Trúc Dữ Liệu & Giải Thuật", "credits": 4, "priority": 2},
@@ -629,12 +715,14 @@ def orchestrate(query: str, session_id: str = "default_user") -> Dict[str, Any]:
             "**📅 Lập lịch Ôn thi & Dự báo GPA** ở phía trên để tự thêm môn học, ngày thi "
             "và kéo thanh trượt điều chỉnh số giờ rảnh mỗi ngày nhé!"
         )
+        resp_text = "\n".join(lines)
+        session.add_message("assistant", resp_text)
         return {
             "status": "success",
             "intent": intent,
             "target_engine": target_engine,
-            "response_text": "\n".join(lines),
-            "data": {"sample_plan": sample_plan},
+            "response_text": resp_text,
+            "data": {"sample_plan": sample_plan, "session_state": session.state.value},
             "provenance": "H.E.R.M.E.S Deterministic EDF Study Scheduler (R2)",
         }
 
@@ -644,6 +732,6 @@ def orchestrate(query: str, session_id: str = "default_user") -> Dict[str, Any]:
             "intent": intent,
             "target_engine": target_engine,
             "response_text": route_info.get("message", "Yêu cầu đã được tiếp nhận."),
-            "data": extracted,
+            "data": {**extracted, "session_state": session.state.value},
             "provenance": None,
         }

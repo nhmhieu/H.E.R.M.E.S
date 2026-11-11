@@ -1,5 +1,5 @@
 """
-Streamlit Web Dashboard for H.E.R.M.E.S (Role R6 - Member 5: Trần Quốc Tuấn).
+Streamlit Web Dashboard for H.E.R.M.E.S (Role R6 - Member 5: Phan Huỳnh Minh Tuấn).
 
 Provides an interactive, student-friendly 3-tab interface + Sidebar Student Profile
 & GPA Calculator connected to the H.E.R.M.E.S Orchestrator, Deterministic Engines,

@@ -144,3 +144,19 @@ def test_ollama_mode_client_generation(monkeypatch):
     assert resp.model == "qwen2.5:3b"
     assert resp.is_mock is False
     assert resp.text == "Phản hồi từ Ollama Local LLM"
+
+
+def test_orchestrate_multi_turn_session_state():
+    # Turn 1: User asks to calculate GPA without providing grades -> enters AWAITING_GRADES
+    r1 = orchestrate("Tính điểm GPA học kỳ này giúp mình với", session_id="sv_k24_test")
+    assert r1["status"] == "needs_info"
+    assert r1["data"]["session_state"] == "AWAITING_GRADES"
+
+    # Turn 2: User provides only grades without the word "GPA" -> SessionManager resolves to CALC_GPA
+    r2 = orchestrate(
+        "Giải tích 1 (8.5, 4TC), C++ (7.5, 3 tín)", session_id="sv_k24_test"
+    )
+    assert r2["status"] == "success"
+    assert r2["intent"] == INTENT_CALC_GPA
+    assert r2["data"]["gpa_10"] == 8.07
+    assert r2["data"]["session_state"] == "IDLE"

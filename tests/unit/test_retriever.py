@@ -6,7 +6,14 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
-from hermes.rag.retriever import KeywordRetriever, bo_dau  # noqa: E402
+from hermes.rag.retriever import (  # noqa: E402
+    ALIAS_CHUONG_TRINH,
+    ALIAS_NGANH,
+    KeywordRetriever,
+    bo_dau,
+    nhan_dien,
+    nhan_dien_khoa,
+)
 
 
 def _vb(vid, nganh=None, het_hieu_luc=None):
@@ -194,20 +201,6 @@ def test_thong_bao_khi_khong_tim_thay(tmp_path):
     assert r.search("ielts", min_score=0, min_ratio=0)["thong_bao"] is None
 
 
-"""
-Unit tests for H.E.R.M.E.S Regulation Retriever (Role R3).
-"""
-
-from hermes.rag.retriever import (
-    ALIAS_CHUONG_TRINH,
-    ALIAS_NGANH,
-    KeywordRetriever,
-    bo_dau,
-    nhan_dien,
-    nhan_dien_khoa,
-)
-
-
 def test_bo_dau_normalizes_vietnamese():
     assert bo_dau("Chuẩn đầu ra Tiếng Anh ĐH KHTN") == "chuan dau ra tieng anh dh khtn"
 
@@ -273,4 +266,3 @@ def test_retriever_out_of_scope_query_returns_empty():
     retriever = KeywordRetriever()
     res = retriever.search("pizza sushi pasta burger ramen taco")
     assert res["ket_qua"] == []
-

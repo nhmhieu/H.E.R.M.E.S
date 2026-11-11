@@ -20,3 +20,37 @@
 | **Week 3** | **TV4 – Đào Nhật Quân** (`25127471`) | System Safety & Local AI Lead (R7, R4) | Expand adversarial defense to 500-case red-team suite (Base64/ROT13/Leetspeak/Multilingual) & add Local **Ollama (`qwen2.5:3b`)** mode | PR `#28` merged to `main` (`guardrails.py`, `client.py`, `test_guardrails.py`) | Keeping guardrail latency below 2ms with large regex sets | Pre-compile regex patterns at module import time |
 | **Week 3** | **TV5 – Phan Huỳnh Minh Tuấn** (`25127168`) | UI/UX & Client Application Lead (R6) | Connect 3-Tab Streamlit Web Dashboard (`app.py`) to live `orchestrate()`, `scheduler`, and `deadline_parser` | `src/hermes/ui/app.py` | Synchronizing Streamlit `session_state` across tabs | Store course list and chat messages in `st.session_state` for seamless tab switching |
 | **Week 3** | **TV6 – Hồ Ngọc Như Ý** (`25127176`) | QA, Evaluation & Benchmark Lead (R8, R4) | Complete Moodle `.ics` parser (`deadline_parser.py`) and run 72-case Benchmark Iteration 1 (100% accuracy, 0.60ms latency) | `deadline_parser.py`, `benchmark_cases.json`, `run_evaluation.py` | Unfolding multi-line RFC 5545 `.ics` descriptions | Unfold continuation lines starting with whitespace before parsing `VEVENT` keys |
+| **Week 4** | **TV1 – Nguyễn Huỳnh Minh Hiếu** (`25127331`) | Team Leader & System Architect (R1, R5) | Integrate `SessionManager` (`session.py`) into `orchestrate()`, finalize C4 diagrams (`system_context.md`, `container.md`, `component.md`) & `ENGINEERING_REPORT.md` | PRs `#27, #29, #30` merged; `docs/ARCHITECTURE.md`, `docs/ENGINEERING_REPORT.md` | None | Explicit state machine integration enables seamless multi-turn GPA and cohort resolution |
+| **Week 4** | **TV2 – Nghiêm Đình Thuận** (`25127152`) | Deterministic & Algorithm Lead (R2) | Verify all 10-to-4 GPA conversion edge cases, Article 16 warnings, and EDF scheduler pseudocode | `src/hermes/engines/academic_calc.py`, `scheduler.py` (100% test pass) | None | Priority queue weighting balances credit load and exam proximity effectively |
+| **Week 4** | **TV3 – Đào Ngọc Vinh** (`25127552`) | Knowledge Base & RAG Lead (R3) | Merge 12 mathematical BM25 unit tests (`IDF`, `TF saturation`, `title boost`, `expired doc filter`) into `main` | Commit `9c7c3f8` (`tests/unit/test_retriever.py`, `retriever.py`) | None | Combining unit tests on synthetic chunks with real HCMUS regulation tests guarantees both algorithmic and domain correctness |
+| **Week 4** | **TV4 – Đào Nhật Quân** (`25127471`) | System Safety & Local AI Lead (R7, R4) | Merge `system_instruction` injection defense & document Failure Catalogue / Red-Team analysis | PR `#30` merged (`guardrails.py`, `docs/EVALUATION_AND_RISK_PACK.md`) | None | Multi-layer normalization catches spaced and obfuscated adversarial payloads |
+| **Week 4** | **TV5 – Phan Huỳnh Minh Tuấn** (`25127168`) | UI/UX & Client Application Lead (R6) | Upgrade Streamlit Web UI with HCMUS hero banner, student cohort/program profile selector, typewriter streaming, and `.ics` demo loader | PR `#27` + commits `c9250de`, `ba3d33e` (`src/hermes/ui/app.py`) | None | Contextual quick-action chips and markdown tables dramatically improve user experience |
+| **Week 4** | **TV6 – Hồ Ngọc Như Ý** (`25127176`) | QA, Evaluation & Benchmark Lead (R8, R4) | Merge `.ics` parser & 72-case Benchmark suite (`PR #29`), document Iteration 1 (80.56%) $\rightarrow$ Iteration 2 (100.00%) Error Taxonomy | PR `#29` merged (`deadline_parser.py`, `tests/benchmark/`, `EVALUATION_AND_RISK_PACK.md`) | None | Documenting the error taxonomy from Iteration 1 directly guided targeted regex and router fixes |
+
+---
+
+## Summary of Team Contributions on `main` (Submission Pack 07)
+
+| No. | Student ID | Full Name | Role | GitHub Account / Author | Merged PRs & Key Deliverables | Test & Verification Ownership |
+| :---: | :---: | :--- | :--- | :--- | :--- | :--- |
+| 1 | `25127331` | **Nguyễn Huỳnh Minh Hiếu** | R1, R5 | `@nhmhieu` (`nhmhieu`) | PR `#1`, `#16`; `orchestrator.py`, `session.py`, `cli.py`, C4 Diagrams, Engineering Report | `tests/unit/test_orchestrator.py` + `TV1_01..TV1_12` |
+| 2 | `25127152` | **Nghiêm Đình Thuận** | R2 | `@thuannghiem11` (`Jake`) | PR `#25`, `#26`; `academic_calc.py`, `scheduler.py` | `test_academic_calc.py`, `test_scheduler.py` + `TV2_01..TV2_12` |
+| 3 | `25127552` | **Đào Ngọc Vinh** | R3 | `@daongocvinh` (`vinh`) | PR `#18`, `feature/data-retriever`; `hcmus_regulations.json` (17 docs), `retriever.py` | `tests/unit/test_retriever.py` (20 tests) + `TV3_01..TV3_12` |
+| 4 | `25127471` | **Đào Nhật Quân** | R7, R4 | `@dnquan14` (`quan`) | PR `#19`, `#30`; `guardrails.py` (4 layers), `ai/client.py` (Ollama & Grounding) | `tests/unit/test_guardrails.py` + `TV4_01..TV4_12` |
+| 5 | `25127168` | **Phan Huỳnh Minh Tuấn** | R6 | `@phmtuan2522-coder` | PR `#27`; `src/hermes/ui/app.py` (3-Tab Streamlit UI), `ai_cli.py`, `cli.py` | End-to-End UI/CLI validation + `TV5_01..TV5_12` |
+| 6 | `25127176` | **Hồ Ngọc Như Ý** | R8, R4 | `@hnny712` | PR `#29`; `deadline_parser.py` (`.ics`), `benchmark_cases.json` (72 cases), `run_evaluation.py` | `test_deadline_parser.py`, `baseline_report.json` + `TV6_01..TV6_12` |
+
+---
+
+## Record of How AI Tools Were Used and Verified (Responsible AI Policy)
+
+In compliance with Section 07 & Section 08 of the course specification (*CSC10014 – Responsible AI Usage*):
+
+1. **Scope of AI Tool Assistance During Development:**
+   - **Brainstorming & Boilerplate Generation:** Used Gemini / GitHub Copilot to draft initial regular expression candidates for Vietnamese grade parsing, generate synthetic adversarial prompt-injection test strings, and format Markdown tables/Mermaid C4 syntax.
+   - **Debugging & Linting:** Assisted in resolving Windows UTF-8 console encoding issues and `flake8` PEP8 line-length formatting.
+2. **Human Verification & Accountability Protocol (How We Verified):**
+   - **Zero Unverified Regulations:** AI tools were **never** allowed to invent or summarize HCMUS regulations from pre-training memory. All 17 legal documents in [`data/regulations/hcmus_regulations.json`](../data/regulations/hcmus_regulations.json) were manually extracted and cross-checked word-for-word against official PDFs signed by VNU-HCM University of Science (`1175/QĐ-KHTN`, `2464/QĐ-KHTN`, `1983/QĐ-KHTN`, `1984/QĐ-KHTN`, `1985/QĐ-KHTN`).
+   - **Deterministic Math Verification:** Every formula in [`academic_calc.py`](../src/hermes/engines/academic_calc.py) and [`scheduler.py`](../src/hermes/engines/scheduler.py) was verified against manual hand-calculated test cases in `test_academic_calc.py` and `test_scheduler.py`.
+   - **Automated CI Gate (`475 Unit Tests` + `72 Benchmark Cases`):** No code (human-written or AI-assisted) was merged into `main` without passing `flake8 src tests` and the full `pytest` regression suite (`475 passed`).
+   - **Strict Privacy & Secret Hygiene:** Zero API keys, personal student transcripts, or credentials were ever uploaded to external cloud AI services or committed to Git. Runtime AI inference uses self-hosted **Local Ollama (`qwen2.5:3b`)** on `localhost:11434`.
