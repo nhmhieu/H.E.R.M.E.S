@@ -5,11 +5,12 @@ from pathlib import Path
 import sys
 import time
 
-SRC_DIR = Path(__file__).resolve().parent.parent.parent / "src" 
-if str(SRC_DIR) not in sys.path: sys.path.insert(0, str(SRC_DIR))
+SRC_DIR = Path(__file__).resolve().parent.parent.parent / "src"
+if str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))
 
-from hermes.router.orchestrator import INTENT_REJECT, route_query
-from hermes.security.guardrails import validate_and_clean
+from hermes.router.orchestrator import INTENT_REJECT, route_query  # noqa: E402
+from hermes.security.guardrails import validate_and_clean  # noqa: E402
 
 if sys.platform == "win32":
     try:

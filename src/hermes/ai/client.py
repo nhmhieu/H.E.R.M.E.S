@@ -1,3 +1,11 @@
+"""
+AI Client module for H.E.R.M.E.S (Member 4 - AI & System Security).
+
+Provides a unified interface for interacting with Google Gemini API
+with strict separation between 'mock' mode (offline, deterministic)
+and 'gemini' mode (live API calls), plus safe instructor announcement extraction.
+"""
+
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
@@ -11,7 +19,9 @@ import urllib.error
 import urllib.request
 
 from hermes.security.guardrails import (
+    MAX_SYSTEM_INSTRUCTION_LENGTH,
     ZERO_WIDTH_CHARS,
+    sanitize_ai_output,
     validate_and_clean,
 )
 
@@ -914,8 +924,27 @@ def generate_response(
     Public wrapper function used by H.E.R.M.E.S engines/router (R4).
     Optionally forwards a system instruction and returns the response string.
     """
+    safe_system_instruction: str | None = None
+    if system_instruction is not None:
+        if not isinstance(system_instruction, str):
+            raise AIConfigError("system_instruction must be a string when provided.")
+
+        system_guard = validate_and_clean(
+            system_instruction,
+            max_length=MAX_SYSTEM_INSTRUCTION_LENGTH,
+        )
+        if not system_guard.allowed:
+            raise AIConfigError(f"System instruction blocked: {system_guard.reason}")
+
+        safe_system_instruction = sanitize_ai_output(system_guard.cleaned_text)
+        if not safe_system_instruction:
+            raise AIConfigError("System instruction is empty after sanitization.")
+
     client = HermesAIClient(mode=mode, api_key=api_key, model=model)
-    response = client.generate(prompt, system_instruction=system_instruction)
+    response = client.generate(
+        prompt,
+        system_instruction=safe_system_instruction,
+    )
     return response.text
 
 
