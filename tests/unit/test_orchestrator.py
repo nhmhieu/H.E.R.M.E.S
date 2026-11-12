@@ -160,3 +160,21 @@ def test_orchestrate_multi_turn_session_state():
     assert r2["intent"] == INTENT_CALC_GPA
     assert r2["data"]["gpa_10"] == 8.07
     assert r2["data"]["session_state"] == "IDLE"
+
+
+def test_orchestrate_scheduling_and_deadline_extraction():
+    sched_res = orchestrate(
+        "Xếp lịch ôn thi trong 7 ngày với 5 giờ mỗi ngày cho môn Giải tích 1 và Cấu trúc dữ liệu"
+    )
+    assert sched_res["status"] == "success"
+    assert sched_res["intent"] == INTENT_SCHEDULING
+    assert sched_res["data"]["days_left"] == 7
+    assert sched_res["data"]["daily_hours"] == 5.0
+    assert len(sched_res["data"]["sample_plan"]) == 2
+
+    dl_res = orchestrate(
+        "Thông báo: Môn học: Cơ sở dữ liệu. Bài tập: Đồ án SQL. Hạn nộp: 23:59 ngày 22/11/2026."
+    )
+    assert dl_res["status"] == "success"
+    assert dl_res["intent"] == INTENT_EXTRACT_DEADLINE
+    assert dl_res["data"]["extracted_deadline_item"]["course"] == "Cơ sở dữ liệu"

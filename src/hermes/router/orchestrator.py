@@ -10,6 +10,8 @@ Routes user queries to appropriate specialized engines:
 - REJECT: System rejects query due to policy violation or out-of-scope (R5/R7)
 """
 
+from __future__ import annotations
+
 import re
 from typing import Any, Dict
 
@@ -201,7 +203,6 @@ def route_query(query: str) -> Dict[str, Any]:
     dl_score = _score_keywords(query_lower, DEADLINE_KEYWORDS)
 
     # Contextual priority checks
-    # Check for Deadline extraction first if text looks like an announcement
     if dl_score >= 2 or (".ics" in query_lower) or ("thông báo:" in query_lower):
         return {
             "intent": INTENT_EXTRACT_DEADLINE,
@@ -211,7 +212,6 @@ def route_query(query: str) -> Dict[str, Any]:
             "message": "Trích xuất deadline và thông tin bài tập.",
         }
 
-    # If scores are all 0
     max_score = max(gpa_score, sched_score, reg_score)
     if max_score == 0:
         return {
@@ -219,7 +219,10 @@ def route_query(query: str) -> Dict[str, Any]:
             "confidence": 0.50,
             "target_engine": "clarifier",
             "extracted_params": {},
-            "message": "Câu hỏi chưa rõ ràng. Bạn có thể nói rõ hơn về vấn đề học vụ hoặc lịch học cần giúp đỡ không?",
+            "message": (
+                "Câu hỏi chưa rõ ràng. Bạn có thể nói rõ hơn về vấn đề học vụ "
+                "hoặc lịch học cần giúp đỡ không?"
+            ),
         }
 
     # Scheduling intent
@@ -334,9 +337,10 @@ def _extract_student_context(text_lower: str) -> Dict[str, str]:
         "tăng cường tiếng anh" in text_lower
         or "tcta" in text_lower
         or "chất lượng cao" in text_lower
+        or "clc" in text_lower
     ):
         ctx["program"] = "chương trình tăng cường tiếng Anh"
-    elif "tiên tiến" in text_lower or "apcs" in text_lower:
+    elif "tiên tiến" in text_lower or "apcs" in text_lower or "cttt" in text_lower:
         ctx["program"] = "chương trình tiên tiến"
     elif "hệ chuẩn" in text_lower or "đại trà" in text_lower:
         ctx["program"] = "hệ chuẩn"
@@ -346,16 +350,354 @@ def _extract_student_context(text_lower: str) -> Dict[str, str]:
 def _classify_academic_rank(gpa_10: float) -> str:
     """Phân loại học lực theo thang điểm 10 chuẩn HCMUS."""
     if gpa_10 >= 9.0:
-        return "Xuất sắc 🌟"
+        return "Xuất sắc"
     if gpa_10 >= 8.0:
-        return "Giỏi 🏆"
+        return "Giỏi"
     if gpa_10 >= 7.0:
-        return "Khá 👍"
+        return "Khá"
     if gpa_10 >= 6.0:
-        return "Trung bình khá 📈"
+        return "Trung bình khá"
     if gpa_10 >= 5.0:
-        return "Trung bình ⚠️"
-    return "Yếu / Nguy cơ cảnh báo 🚨"
+        return "Trung bình"
+    return "Yếu (Cần lưu ý cảnh báo học vụ)"
+
+
+_CERT_DISPLAY_NAMES = {
+    "IELTS": "IELTS",
+    "TOEFL_iBT": "TOEFL iBT",
+    "TOEIC": "TOEIC",
+    "TOEIC_4_ky_nang": "TOEIC (4 kỹ năng)",
+    "TOEIC_Nghe_Doc": "TOEIC (Nghe - Đọc)",
+    "TOEIC_Noi_Viet": "TOEIC (Nói - Viết)",
+    "TOEFL_ITP": "TOEFL ITP",
+    "TOEFL_ITP_va_TOEIC_Noi_Viet": "TOEFL ITP + TOEIC Nói-Viết",
+    "VSTEP": "VSTEP",
+    "Bac_3_VN": "Khung năng lực Ngoại ngữ 6 bậc VN (Bậc 3)",
+    "Bac_4_VN": "Khung năng lực Ngoại ngữ 6 bậc VN (Bậc 4)",
+    "FCE": "Cambridge B2 First (FCE)",
+    "PET": "Cambridge B1 Preliminary (PET)",
+    "BEC_Busines_Vantage": "Cambridge BEC Business Vantage",
+    "BEC_Preliminary": "Cambridge BEC Preliminary",
+    "BULATS": "BULATS",
+    "JLPT": "Tiếng Nhật JLPT",
+    "PTE_Academic": "PTE Academic",
+}
+
+
+def _format_clean_regulation_body(raw_text: str, has_structured_table: bool) -> str:
+    """
+    Làm sạch văn bản quy chế để hiển thị dễ đọc như một cố vấn viết lại,
+    loại bỏ đoạn dump 'Bảng (...):' nếu đã có bảng cấu trúc riêng.
+    """
+    lines = [ln.strip() for ln in raw_text.strip().splitlines() if ln.strip()]
+    cleaned_lines: list[str] = []
+
+    for ln in lines:
+        if has_structured_table and (ln.startswith("Bảng (") or "|" in ln):
+            continue
+        # Chuyển các ý a), b), c), d) thành gạch đầu dòng dễ nhìn
+        sub_match = re.match(r"^([a-h])\)\s+(.*)$", ln)
+        if sub_match:
+            cleaned_lines.append(f"- **{sub_match.group(1)})** {sub_match.group(2)}")
+        else:
+            cleaned_lines.append(ln)
+
+    return "\n\n".join(cleaned_lines)
+
+
+def _render_structured_table(bang: dict[str, Any]) -> str:
+    """Chuyển trường 'bang' trong JSON quy chế thành bảng Markdown chuẩn."""
+    cols = bang.get("cot") or []
+    rows = bang.get("dong") or []
+    if not cols or not rows:
+        return ""
+
+    col_labels = {
+        "tieu_chi": "Tiêu chí đánh giá",
+        "noi_dung": "Nội dung chi tiết",
+        "ty_le": "Tỷ lệ điểm",
+        "ten_hoc_phan": "Học phần",
+        "nghe": "Nghe",
+        "noi": "Nói",
+        "doc": "Đọc",
+        "viet": "Viết",
+        "khoa": "Khóa tuyển",
+        "hoc_phan_dat": "Yêu cầu học phần",
+        "chung_chi": "Chứng chỉ tương đương",
+    }
+    headers = [col_labels.get(str(c), str(c).replace("_", " ").title()) for c in cols]
+    md = [
+        "| " + " | ".join(headers) + " |",
+        "| " + " | ".join([":---"] * len(headers)) + " |",
+    ]
+    for r in rows:
+        cells = [str(cell) if cell is not None else "—" for cell in r]
+        md.append("| " + " | ".join(cells) + " |")
+    return "\n".join(md)
+
+
+def _build_regulation_advisor_response(
+    query: str,
+    rag_res: dict[str, Any],
+) -> tuple[str, str | None, list[str]]:
+    """
+    Tổng hợp câu trả lời tư vấn quy chế tự nhiên, đi thẳng vào câu hỏi của sinh viên,
+    không lặp lại mẫu câu cứng nhắc và hỗ trợ so sánh khi câu hỏi chưa rõ hệ/khóa.
+    """
+    hits = rag_res.get("ket_qua", [])
+    if not hits:
+        resp = (
+            "Mình chưa tìm thấy điều khoản nào khớp trực tiếp với câu hỏi này "
+            "trong cơ sở dữ liệu quy chế hiện tại của trường.\n\n"
+            "Bạn có thể nói rõ hơn vấn đề đang gặp phải (ví dụ: *chuẩn ngoại ngữ đầu ra theo khóa*, "
+            "*quy định học phần Anh văn*, *điều kiện cảnh báo học vụ*, hoặc *xác minh chứng chỉ*) "
+            "để mình tra cứu chính xác hơn nhé."
+        )
+        follow_ups = [
+            "Chuẩn đầu ra ngoại ngữ chương trình đại trà khóa 2024 là gì?",
+            "Chuẩn đầu ra ngoại ngữ ngành Công nghệ thông tin hệ tăng cường tiếng Anh?",
+            "Sinh viên vắng quá mấy buổi học Anh văn thì bị mất điểm quá trình?",
+        ]
+        return resp, None, follow_ups
+
+    q_lower = query.lower()
+    top_hit = hits[0]
+
+    # Chỉ ưu tiên nhảy sang chunk bảng điểm chứng chỉ khi người dùng thực sự hỏi về chuẩn/chứng chỉ/điểm
+    asking_cert_scores = any(
+        kw in q_lower
+        for kw in [
+            "chuẩn đầu ra",
+            "ngoại ngữ",
+            "tiếng anh",
+            "ielts",
+            "toeic",
+            "toefl",
+            "vstep",
+            "jlpt",
+            "chứng chỉ",
+            "bao nhiêu điểm",
+            "mấy chấm",
+        ]
+    ) and not any(
+        kw in q_lower
+        for kw in [
+            "hồ sơ",
+            "thủ tục",
+            "giả",
+            "hiệu lực",
+            "mấy năm",
+            "vắng",
+            "quá trình",
+        ]
+    )
+
+    if asking_cert_scores and not top_hit.get("chung_chi_toi_thieu"):
+        top_vb_prefix = str(top_hit.get("chunk_id", "")).split("_")[0]
+        for h in hits:
+            h_prefix = str(h.get("chunk_id", "")).split("_")[0]
+            if h.get("chung_chi_toi_thieu") and h_prefix == top_vb_prefix:
+                top_hit = h
+                break
+
+    citation = top_hit.get("trich_dan", "Quy định Đào tạo ĐH Khoa học Tự nhiên")
+    pham_vi = top_hit.get("pham_vi", "sinh viên ĐH chính quy")
+    ten_dieu = top_hit.get("ten_dieu", "")
+    cert_dict = top_hit.get("chung_chi_toi_thieu") or {}
+    bang_data = top_hit.get("bang")
+    body_text = _format_clean_regulation_body(
+        top_hit.get("text", ""), has_structured_table=bool(bang_data)
+    )
+
+    sections: list[str] = []
+
+    # 1. Cảnh báo nếu khóa tuyển người dùng hỏi nằm ngoài phạm vi văn bản hiện có
+    if rag_res.get("canh_bao"):
+        sections.append(f"> **Lưu ý về khóa tuyển:** {rag_res['canh_bao']}")
+
+    # 2. Mở đầu trực diện như một người cố vấn thực thụ
+    if cert_dict:
+        # Kiểm tra xem sinh viên có hỏi đích danh 1 chứng chỉ cụ thể không
+        specific_matches: list[tuple[str, str]] = []
+        for k, v in cert_dict.items():
+            k_low = k.lower()
+            if (
+                ("ielts" in q_lower and "ielts" in k_low)
+                or ("toeic" in q_lower and "toeic" in k_low)
+                or ("toefl" in q_lower and "toefl" in k_low)
+                or ("vstep" in q_lower and ("vstep" in k_low or "bac_" in k_low))
+                or ("jlpt" in q_lower or "nhật" in q_lower)
+                and "jlpt" in k_low
+            ):
+                specific_matches.append((_CERT_DISPLAY_NAMES.get(k, k), v))
+
+        if specific_matches:
+            summary_items = "; ".join(
+                f"**{name}**: {val}" for name, val in specific_matches
+            )
+            sections.append(
+                f"Đối với **{pham_vi}**, mức chuẩn tối thiểu bạn cần đạt là {summary_items}."
+            )
+        else:
+            ielts_val = cert_dict.get("IELTS")
+            toeic_val = cert_dict.get("TOEIC_4_ky_nang") or cert_dict.get("TOEIC")
+            quick_highlights = []
+            if ielts_val:
+                quick_highlights.append(f"**IELTS {ielts_val.split('(')[0].strip()}**")
+            if toeic_val:
+                quick_highlights.append(f"**TOEIC {toeic_val.split('(')[0].strip()}**")
+            highlight_str = (
+                f" (phổ biến nhất là {' hoặc '.join(quick_highlights)})"
+                if quick_highlights
+                else ""
+            )
+            sections.append(
+                f"Theo quy định áp dụng cho **{pham_vi}**, sinh viên cần đạt một trong "
+                f"các mức chứng chỉ ngoại ngữ tối thiểu dưới đây{highlight_str} để đủ "
+                "điều kiện xét tốt nghiệp:"
+            )
+
+        table_lines = [
+            "| Chứng chỉ / Bài thi | Yêu cầu tối thiểu được công nhận |",
+            "| :--- | :--- |",
+        ]
+        for k, v in cert_dict.items():
+            display_k = _CERT_DISPLAY_NAMES.get(k, k.replace("_", " "))
+            table_lines.append(f"| **{display_k}** | {v} |")
+        sections.append("\n".join(table_lines))
+    else:
+        if ten_dieu:
+            sections.append(
+                f"Về **{ten_dieu}** (*áp dụng cho {pham_vi}*), quy định cụ thể như sau:"
+            )
+        sections.append(body_text)
+
+    if bang_data:
+        rendered_table = _render_structured_table(bang_data)
+        if rendered_table:
+            sections.append(rendered_table)
+
+    # 3. Nếu câu hỏi còn chung chung, tự động so sánh giúp sinh viên
+    if rag_res.get("can_hoi_lai") and len(hits) > 1:
+        comp_rows = []
+        seen_programs = set()
+        for h in hits:
+            cc = h.get("chung_chi_toi_thieu")
+            pv = h.get("pham_vi", "")
+            if cc and pv and pv not in seen_programs:
+                seen_programs.add(pv)
+                ielts_v = cc.get("IELTS", "—").split("(")[0].strip()
+                toeic_v = (
+                    (cc.get("TOEIC_4_ky_nang") or cc.get("TOEIC") or "—")
+                    .split("(")[0]
+                    .strip()
+                )
+                comp_rows.append(f"| {pv} | {ielts_v} | {toeic_v} |")
+        if len(comp_rows) > 1:
+            sections.append(
+                "**So sánh nhanh giữa các chương trình đào tạo:**\n"
+                "Vì mỗi hệ đào tạo có mức chuẩn khác nhau, bạn có thể đối chiếu bảng "
+                "dưới đây (hoặc chọn đúng Khóa/Hệ của bạn ở thanh bên trái):\n\n"
+                "| Chương trình & Khóa áp dụng | IELTS tối thiểu | TOEIC tối thiểu |\n"
+                "| :--- | :--- | :--- |\n" + "\n".join(comp_rows)
+            )
+
+    # 4. Căn cứ pháp lý gọn gàng ở cuối
+    sections.append(f"---\n*Căn cứ pháp lý: {citation} • Phạm vi: {pham_vi}*")
+
+    # 5. Gợi ý câu hỏi tiếp theo theo đúng mạch đang hỏi
+    if cert_dict:
+        follow_ups = [
+            "Hồ sơ xét đạt chuẩn ngoại ngữ đầu ra gồm những giấy tờ gì?",
+            "Chứng chỉ ngoại ngữ có thời hạn hiệu lực mấy năm khi nộp xét tốt nghiệp?",
+            "Trường xử lý thế nào nếu phát hiện nộp chứng chỉ ngoại ngữ không hợp lệ?",
+        ]
+    elif "hồ sơ" in q_lower or "thủ tục" in q_lower:
+        follow_ups = [
+            "Chuẩn đầu ra ngoại ngữ ngành Công nghệ thông tin hệ tăng cường tiếng Anh là gì?",
+            "Chứng chỉ không ghi thời hạn thì hiệu lực được tính bao lâu?",
+            "Thời điểm nào sinh viên phải hoàn tất nộp chứng chỉ ngoại ngữ?",
+        ]
+    else:
+        follow_ups = [
+            "Điểm đánh giá quá trình môn Anh văn chiếm bao nhiêu phần trăm?",
+            "Sinh viên vắng quá 3 buổi học Anh văn sẽ bị xử lý thế nào?",
+            "Chuẩn tiếng Anh để được học các học phần chuyên ngành là gì?",
+        ]
+
+    return "\n\n".join(sections), citation, follow_ups
+
+
+def _parse_schedule_params_from_query(
+    query: str, session_grades: list[dict] | None = None
+) -> tuple[list[dict], float, int]:
+    """
+    Trích xuất linh hoạt số ngày, số giờ học mỗi ngày và danh sách môn thi
+    ngay từ câu chat của người dùng (thay vì luôn trả về bộ môn cố định).
+    """
+    q_lower = query.lower()
+
+    # 1. Số ngày ôn tập
+    days_left = 10
+    week_match = re.search(r"(\d+)\s*tuần", q_lower)
+    day_match = re.search(r"(\d+)\s*ngày", q_lower)
+    if day_match:
+        days_left = max(1, min(60, int(day_match.group(1))))
+    elif week_match:
+        days_left = max(1, min(60, int(week_match.group(1)) * 7))
+    elif "tuần sau" in q_lower or "tuần tới" in q_lower:
+        days_left = 7
+
+    # 2. Số giờ rảnh mỗi ngày
+    daily_hours = 6.0
+    hour_match = re.search(r"(\d+(?:\.\d+)?)\s*(?:giờ|tiếng|h)\b", q_lower)
+    if hour_match:
+        daily_hours = max(1.0, min(14.0, float(hour_match.group(1))))
+
+    # 3. Danh sách môn học (nếu người dùng có nhắc tới trong câu hỏi)
+    known_subjects = [
+        ("Giải tích 1", 4, 3, ["giải tích 1", "giải tích", "toán"]),
+        ("Đại số Tuyến tính", 4, 2, ["đại số", "tuyến tính"]),
+        (
+            "Cấu trúc Dữ liệu & Giải thuật",
+            4,
+            3,
+            ["cấu trúc dữ liệu", "ctdl", "giải thuật"],
+        ),
+        ("Hệ điều hành", 4, 3, ["hệ điều hành", "hdh"]),
+        ("Mạng máy tính", 4, 2, ["mạng máy tính", "mạng"]),
+        ("Cơ sở dữ liệu", 4, 2, ["cơ sở dữ liệu", "csdl"]),
+        ("Vật lý đại cương", 3, 2, ["vật lý", "lý"]),
+        ("Nhập môn Lập trình", 4, 2, ["lập trình", "c++", "code"]),
+        ("Kiến trúc Máy tính", 3, 2, ["kiến trúc máy tính", "ktmt"]),
+        ("Toán Rời Rạc", 4, 3, ["rời rạc"]),
+    ]
+    matched_subjects: list[dict] = []
+    for name, cred, prio, aliases in known_subjects:
+        if any(a in q_lower for a in aliases):
+            matched_subjects.append({"name": name, "credits": cred, "priority": prio})
+
+    if matched_subjects:
+        return matched_subjects, daily_hours, days_left
+
+    if session_grades:
+        from_session = [
+            {
+                "name": g["subject"],
+                "credits": int(g["credits"]),
+                "priority": 3 if g["grade"] < 6.5 else (2 if g["grade"] < 8.0 else 1),
+            }
+            for g in session_grades
+        ]
+        if from_session:
+            return from_session, daily_hours, days_left
+
+    default_subjects = [
+        {"name": "Toán Rời Rạc", "credits": 4, "priority": 3},
+        {"name": "Cấu trúc Dữ liệu & Giải thuật", "credits": 4, "priority": 2},
+        {"name": "Kiến trúc Máy tính", "credits": 3, "priority": 1},
+    ]
+    return default_subjects, daily_hours, days_left
 
 
 def orchestrate(query: str, session_id: str = "default_user") -> Dict[str, Any]:
@@ -367,16 +709,16 @@ def orchestrate(query: str, session_id: str = "default_user") -> Dict[str, Any]:
     2. Cập nhật và đồng bộ trạng thái hội thoại qua SessionManager (R5)
     3. Phân loại ý định qua Router 2 tầng (R5)
     4. Điều hướng xử lý sang GPA Engine (R2), Scheduler (R2), RAG Quy chế (R3) hoặc AI (R4)
-    5. Định dạng câu trả lời thân thiện, chuyên nghiệp cho Giao diện UI/CLI (R6)
+    5. Định dạng câu trả lời tự nhiên, tập trung vào người dùng (R6)
     """
-    from hermes.router.session import DialogueState
-    from hermes.security.guardrails import validate_and_clean
     from hermes.engines.academic_calc import (
-        calculate_gpa_10,
         calculate_gpa_4,
+        calculate_gpa_10,
         check_academic_warning,
         convert_score_to_4_and_letter,
     )
+    from hermes.router.session import DialogueState
+    from hermes.security.guardrails import validate_and_clean
 
     session = get_session_manager().get_or_create(session_id)
 
@@ -385,20 +727,19 @@ def orchestrate(query: str, session_id: str = "default_user") -> Dict[str, Any]:
     if not guard_res.allowed:
         if guard_res.category == "academic_integrity":
             friendly_reject = (
-                "🛡️ **Chính sách Liêm chính Học thuật (Academic Integrity)**\n\n"
-                "Mình rất tiếc không thể giải trực tiếp bài tập hoặc viết code làm hộ đồ án được "
-                f"(*Lý do: {guard_res.reason}*).\n\n"
-                "💡 **Gợi ý từ H.E.R.M.E.S:** Dù không thể làm bài giúp bạn, mình luôn sẵn sàng hỗ trợ:\n"
-                "- 📅 **Chia nhỏ lộ trình ôn tập & làm đồ án** theo thuật toán ưu tiên hạn chót (EDF).\n"
-                "- 📥 **Bóc tách yêu cầu & hạn nộp (Deadline)** từ thông báo của giảng viên.\n"
-                "- 🎯 **Tính điểm mục tiêu (What-If GPA)** để biết môn này cần đạt tối thiểu bao nhiêu điểm!"
+                "**Mình không thể giải trực tiếp bài tập hoặc làm hộ bài thi/đồ án** "
+                "theo nguyên tắc liêm chính học thuật của trường.\n\n"
+                "Tuy nhiên, nếu bạn đang bị quá tải với bài tập này, mình có thể giúp bạn ngay:\n"
+                "- **Bóc tách yêu cầu & hạn nộp:** Dán thông báo của giảng viên vào đây "
+                "để mình trích xuất checklist cần nộp và cài nhắc hẹn.\n"
+                "- **Chia nhỏ lịch làm bài:** Cho mình biết bạn còn mấy ngày trước hạn nộp "
+                "để mình phân bổ số giờ làm mỗi ngày hợp lý."
             )
         else:
             friendly_reject = (
-                "🛡️ **Hệ thống Bảo vệ An toàn H.E.R.M.E.S (Guardrails)**\n\n"
-                f"Yêu cầu bị từ chối: {guard_res.reason}.\n\n"
-                "💡 Bạn vui lòng đặt các câu hỏi liên quan đến **Quy chế học vụ HCMUS**, "
-                "**Chuẩn đầu ra ngoại ngữ**, **Tính điểm GPA** hoặc **Lập lịch ôn thi** nhé!"
+                f"**Yêu cầu không thể thực hiện:** {guard_res.reason}.\n\n"
+                "Mình chỉ hỗ trợ các vấn đề học vụ tại ĐH Khoa học Tự nhiên (tra cứu quy chế, "
+                "tính điểm GPA, dự báo học lực, bóc tách hạn nộp bài và lập lịch ôn thi)."
             )
         return {
             "status": "blocked",
@@ -408,6 +749,11 @@ def orchestrate(query: str, session_id: str = "default_user") -> Dict[str, Any]:
             "data": {
                 "category": guard_res.category,
                 "session_state": session.state.value,
+                "follow_ups": [
+                    "Lập kế hoạch ôn thi trong 7 ngày giúp mình",
+                    "Chuẩn đầu ra ngoại ngữ ngành Công nghệ thông tin là gì?",
+                    "Tính điểm GPA học kỳ này giúp mình",
+                ],
             },
             "provenance": None,
         }
@@ -426,7 +772,6 @@ def orchestrate(query: str, session_id: str = "default_user") -> Dict[str, Any]:
     target_engine = route_info["target_engine"]
     extracted = route_info.get("extracted_params", {})
 
-    # Nếu lượt trước đang chờ nhập điểm (AWAITING_GRADES) và lượt này người dùng gửi điểm
     if session.state == DialogueState.AWAITING_GRADES:
         followup_grades = extract_grades_from_text(clean_query)
         if followup_grades:
@@ -434,7 +779,6 @@ def orchestrate(query: str, session_id: str = "default_user") -> Dict[str, Any]:
             target_engine = "academic_engine"
             extracted = {"grades": followup_grades, "raw_text": clean_query}
 
-    # 3. Điều phối theo Intent
     # ----------------------------------------------------
     # Nhánh A: Tính điểm học vụ GPA (R2)
     # ----------------------------------------------------
@@ -457,40 +801,65 @@ def orchestrate(query: str, session_id: str = "default_user") -> Dict[str, Any]:
             )
 
             lines = [
-                f"🎓 **Kết quả Phân tích Điểm Học vụ ({len(grades)} học phần • Tổng {total_tc} tín chỉ)**\n",
-                f"- **Điểm trung bình Hệ 10:** `{gpa_10:.2f} / 10.0`",
-                f"- **Điểm trung bình Hệ 4:** `{gpa_4:.2f} / 4.0`",
-                f"- **Xếp loại học lực dự kiến:** **{rank_label}**",
-                f"- **Tín chỉ tích lũy đạt:** `{passed_tc}/{total_tc} TC`\n",
-                "| Môn học / Học phần | Số tín chỉ | Điểm hệ 10 | Điểm hệ 4 | Điểm chữ | Kết quả |",
+                f"Với **{len(grades)} học phần** vừa nhập (tổng **{total_tc} tín chỉ**), "
+                f"điểm trung bình của bạn đạt **{gpa_10:.2f}/10** "
+                f"(tương đương **{gpa_4:.2f}/4.0** — xếp loại **{rank_label}**).\n",
+                "| Học phần | Tín chỉ | Điểm hệ 10 | Điểm hệ 4 | Điểm chữ | Trạng thái |",
                 "| :--- | :---: | :---: | :---: | :---: | :---: |",
             ]
+            low_courses = []
+            retake_courses = []
             for g in grades:
                 s4, letter = convert_score_to_4_and_letter(g["grade"])
-                status_icon = "✅ Đạt" if g["grade"] >= 5.0 else "⚠️ Học lại"
+                if g["grade"] < 5.0:
+                    status_str = "Không đạt (Học lại)"
+                    retake_courses.append(g["subject"])
+                elif g["grade"] < 6.5:
+                    status_str = "Đạt (Có thể cải thiện)"
+                    low_courses.append(g["subject"])
+                else:
+                    status_str = "Đạt tốt"
                 lines.append(
                     f"| **{g['subject']}** | {g['credits']} TC | `{g['grade']:.1f}` "
-                    f"| `{s4:.1f}` | **{letter}** | {status_icon} |"
+                    f"| `{s4:.1f}` | **{letter}** | {status_str} |"
                 )
 
+            # Lời khuyên cá nhân hóa sát với bảng điểm thật của sinh viên
+            advice_parts: list[str] = []
             if warn_info["is_warning"]:
-                lines.append(
-                    f"\n⚠️ **Cảnh báo từ Cố vấn Học tập (Điều 16 - QĐ 1175):** "
-                    f"Hiện tại bảng điểm của bạn có nguy cơ rơi vào diện **{warn_info['status']}** "
-                    f"({'; '.join(warn_info['reasons'])}). Bạn nên ưu tiên đăng ký trả nợ các môn "
-                    "dưới 5.0 và dùng tab **Mô phỏng Điểm mục tiêu (What-If GPA)** để lên kế hoạch kéo điểm nhé!"
-                )
-            elif gpa_10 >= 8.0:
-                lines.append(
-                    "\n💡 **Nhận xét từ H.E.R.M.E.S:** Kết quả học tập của bạn rất ấn tượng! "
-                    "Hãy duy trì phong độ này để đủ điều kiện xét **Học bổng Khuyến khích Học tập** của trường nhé."
+                advice_parts.append(
+                    f"- **Cảnh báo học vụ (Điều 16):** Bạn đang có nguy cơ rơi vào diện **{warn_info['status']}** "
+                    f"do *{'; '.join(warn_info['reasons'])}* (số tín chỉ đạt trong kỳ hiện là `{passed_tc} TC`)."
                 )
             else:
-                lines.append(
-                    "\n💡 **Gợi ý từ H.E.R.M.E.S:** Trạng thái học vụ của bạn hoàn toàn **Bình thường (An toàn)**. "
-                    "Nếu muốn nhắm tới mức GPA Giỏi (8.0+), bạn có thể thử công cụ **Dự báo What-If GPA** ở Tab 2 nhé!"
+                advice_parts.append(
+                    f"- **Đánh giá an toàn học vụ:** Bạn đã tích lũy đạt **{passed_tc}/{total_tc} tín chỉ** "
+                    "trong kỳ và hoàn toàn **không nằm trong diện cảnh báo học vụ**."
                 )
 
+            if retake_courses:
+                advice_parts.append(
+                    f"- **Ưu tiên đăng ký học lại:** Bạn có học phần **{', '.join(retake_courses)}** "
+                    "dưới 5.0 (điểm F). Bạn nên ưu tiên mở lớp học lại sớm để không ảnh hưởng "
+                    "tiến độ xét tốt nghiệp."
+                )
+            elif low_courses and gpa_10 < 8.0:
+                advice_parts.append(
+                    f"- **Chiến lược kéo GPA:** Nếu muốn nâng GPA lên mức Giỏi (8.0+), học phần "
+                    f"**{', '.join(low_courses)}** đang có hệ số quy đổi hệ 4 khá thấp — bạn có thể "
+                    "cân nhắc học cải thiện hoặc tập trung gỡ điểm ở học kỳ tới trong tab "
+                    "**Lập lịch & Dự báo GPA**."
+                )
+            elif gpa_10 >= 8.0:
+                advice_parts.append(
+                    "- **Cơ hội học bổng:** Mức GPA hiện tại của bạn đủ chuẩn cạnh tranh "
+                    "**Học bổng Khuyến khích Học tập** nếu không có học phần nào dưới 5.0 "
+                    "và điểm rèn luyện đạt từ loại Tốt trở lên."
+                )
+
+            lines.append(
+                "\n**Nhận xét & Gợi ý dành cho bạn:**\n" + "\n".join(advice_parts)
+            )
             resp_text = "\n".join(lines)
             session.add_message("assistant", resp_text)
             return {
@@ -503,21 +872,23 @@ def orchestrate(query: str, session_id: str = "default_user") -> Dict[str, Any]:
                     "gpa_4": gpa_4,
                     "grades": grades,
                     "session_state": session.state.value,
+                    "follow_ups": [
+                        "Lập lịch ôn tập cho các môn này trong 10 ngày",
+                        "Chuẩn đầu ra ngoại ngữ để xét tốt nghiệp là bao nhiêu?",
+                        "Nếu kỳ sau mình đăng ký 12 tín chỉ thì cần đạt mấy điểm để lên GPA 8.0?",
+                    ],
                 },
-                "provenance": "Quy chế Đào tạo tín chỉ Trường ĐH Khoa học Tự nhiên, ĐHQG-HCM (QĐ 1175/QĐ-KHTN)",
+                "provenance": "Quy chế Đào tạo theo Hệ thống Tín chỉ – ĐH Khoa học Tự nhiên, ĐHQG-HCM",
             }
         else:
             session.set_state(DialogueState.AWAITING_GRADES)
             resp_text = (
-                "Chào bạn! Mình sẵn sàng tính **GPA Hệ 10, Hệ 4** và kiểm tra "
-                "**nguy cơ Cảnh báo học vụ (Điều 16)** giúp bạn ngay.\n\n"
-                "✍️ **Cách nhập nhanh trong khung chat:** Bạn hãy nhắn danh sách môn kèm điểm "
-                "và số tín chỉ theo mẫu:\n"
-                "- *Ví dụ 1:* `Tính GPA giúp mình: Giải tích 1 (8.5, 4TC), "
-                "Cấu trúc dữ liệu (7.5, 4 tín), Pháp luật (9.0, 2TC)`\n"
-                "- *Ví dụ 2:* `Giải tích 1 (8.0, 4TC), C++ (7.5, 3TC)`\n\n"
-                "👉 Hoặc bạn cũng có thể nhập trực tiếp từng môn ở bảng "
-                "**📊 Tính điểm GPA & Học vụ** ngay thanh bên trái màn hình nhé!"
+                "Để mình tính chính xác **GPA hệ 10, hệ 4** và kiểm tra **điều kiện an toàn học vụ**, "
+                "bạn hãy nhắn tên các môn kèm điểm và số tín chỉ ở tin nhắn tiếp theo nhé.\n\n"
+                "**Ví dụ cách nhắn nhanh:**\n"
+                "`Giải tích 1 (8.5, 4TC), Cấu trúc dữ liệu (7.5, 4 tín), Pháp luật đại cương (9.0, 2TC)`\n\n"
+                "*Hoặc bạn có thể bấm nút **Phân tích bảng điểm hiện tại** ở thanh bên trái "
+                "để gửi bảng điểm của bạn vào đây ngay lập tức.*"
             )
             session.add_message("assistant", resp_text)
             return {
@@ -525,7 +896,14 @@ def orchestrate(query: str, session_id: str = "default_user") -> Dict[str, Any]:
                 "intent": intent,
                 "target_engine": target_engine,
                 "response_text": resp_text,
-                "data": {**extracted, "session_state": session.state.value},
+                "data": {
+                    **extracted,
+                    "session_state": session.state.value,
+                    "follow_ups": [
+                        "Giải tích 1 (8.5, 4TC), Cấu trúc dữ liệu (7.5, 4TC), Tư duy tính toán (9.0, 3TC)",
+                        "Giải tích 1 (4.5, 4TC), Vật lý 1 (5.5, 3TC)",
+                    ],
+                },
                 "provenance": None,
             }
 
@@ -542,85 +920,25 @@ def orchestrate(query: str, session_id: str = "default_user") -> Dict[str, Any]:
         rag_res = retriever.search(effective_rag_query, top_k=5)
         hits = rag_res.get("ket_qua", [])
 
-        if hits:
-            top_hit = hits[0]
-            q_lower = effective_rag_query.lower()
-            if "hồ sơ" not in q_lower and "thủ tục" not in q_lower:
-                for h in hits:
-                    if h.get("chung_chi_toi_thieu"):
-                        top_hit = h
-                        break
-
-            citation = top_hit.get("trich_dan", "Sổ tay sinh viên HCMUS")
-            pham_vi = top_hit.get("pham_vi", "")
-            content = top_hit.get("text", "").strip()
-
-            lines = [
-                "👋 **Chào bạn! Dưới đây là thông tin quy chế chính thức từ "
-                "Trường ĐH Khoa học Tự nhiên (ĐHQG-HCM):**\n",
-                f"- 📄 **Văn bản pháp quy:** **{citation}**",
-            ]
-            if pham_vi:
-                lines.append(f"- 🎯 **Đối tượng / Phạm vi áp dụng:** `{pham_vi}`")
-
-            lines.append("\n#### 📖 Nội dung quy định chi tiết")
-            lines.append(f"> {content}")
-
-            cert_dict = top_hit.get("chung_chi_toi_thieu")
-            if cert_dict:
-                lines.append("\n#### 🏆 Bảng quy đổi Chứng chỉ Ngoại ngữ tối thiểu")
-                lines.append(
-                    "| Loại Chứng chỉ / Bài thi | Mức điểm / Bậc tối thiểu yêu cầu |"
-                )
-                lines.append("| :--- | :--- |")
-                for cert_name, cert_val in cert_dict.items():
-                    lines.append(f"| **{cert_name}** | `{cert_val}` |")
-
-            other_hits = [h for h in hits if h is not top_hit][:2]
-            if other_hits:
-                lines.append(
-                    "\n**🔎 Các điều khoản liên quan khác bạn có thể tham khảo:**"
-                )
-                for oh in other_hits:
-                    oh_cit = oh.get("trich_dan", "Quy chế HCMUS")
-                    oh_pv = f" (*{oh.get('pham_vi')}*)" if oh.get("pham_vi") else ""
-                    lines.append(f"- 📌 {oh_cit}{oh_pv}")
-
-            lines.append(
-                "\n💡 *Mẹo nhỏ: Nếu bạn muốn tra cứu riêng cho một khóa cụ thể (K21–K25) hoặc chương trình "
-                "(Hệ Chuẩn / Tăng cường Tiếng Anh / Tiên tiến), hãy ghi kèm tên khóa vào câu hỏi nhé!*"
-            )
-
-            resp_text = "\n".join(lines)
-            session.add_message("assistant", resp_text)
-            return {
-                "status": "success",
-                "intent": intent,
-                "target_engine": target_engine,
-                "response_text": resp_text,
-                "data": {
-                    "total_matches": len(hits),
-                    "top_hit": top_hit,
-                    "session_state": session.state.value,
-                },
-                "provenance": citation,
-            }
-        else:
-            resp_text = (
-                "Hiện tại mình chưa tìm thấy điều khoản quy chế khớp chính xác 100% với từ khóa này "
-                "trong bộ 17 văn bản Sổ tay Sinh viên HCMUS.\n\n"
-                "💡 **Gợi ý:** Bạn thử hỏi cụ thể hơn về **Chuẩn đầu ra ngoại ngữ (IELTS/TOEIC/VSTEP)**, "
-                "**Cảnh báo học vụ (Điều 16)**, **Học cải thiện điểm**, hoặc **Điều kiện tốt nghiệp** nhé!"
-            )
-            session.add_message("assistant", resp_text)
-            return {
-                "status": "success",
-                "intent": intent,
-                "target_engine": target_engine,
-                "response_text": resp_text,
-                "data": {"total_matches": 0, "session_state": session.state.value},
-                "provenance": None,
-            }
+        resp_text, citation, follow_ups = _build_regulation_advisor_response(
+            effective_rag_query, rag_res
+        )
+        session.add_message("assistant", resp_text)
+        return {
+            "status": "success",
+            "intent": intent,
+            "target_engine": target_engine,
+            "response_text": resp_text,
+            "data": {
+                "total_matches": len(hits),
+                "top_hit": hits[0] if hits else None,
+                "can_hoi_lai": rag_res.get("can_hoi_lai", False),
+                "can_hoi_khoa": rag_res.get("can_hoi_khoa", False),
+                "session_state": session.state.value,
+                "follow_ups": follow_ups,
+            },
+            "provenance": citation,
+        }
 
     # ----------------------------------------------------
     # Nhánh C: Câu hỏi mơ hồ / Chào hỏi cần làm rõ (R5)
@@ -628,17 +946,16 @@ def orchestrate(query: str, session_id: str = "default_user") -> Dict[str, Any]:
     elif intent == INTENT_CLARIFY:
         session.set_state(DialogueState.AWAITING_CLARIFICATION)
         resp_text = (
-            "👋 **Xin chào! Mình là H.E.R.M.E.S – Trợ lý Học vụ Thông minh dành cho sinh viên HCMUS.**\n\n"
-            "Mình có thể hỗ trợ bạn ngay 4 mảng công việc sau:\n"
-            "1. 📖 **Tra cứu Quy chế & Chuẩn Ngoại ngữ:** Hỏi đáp chính xác từ 17 văn bản pháp quy "
-            "(K21–K25, Chuẩn, TCTA, Tiên tiến).\n"
-            "2. 🧮 **Tính GPA Hệ 10 / Hệ 4 & Cảnh báo Học vụ:** Quy đổi điểm chuẩn Quyết định 1175 "
-            "và kiểm tra Điều 16.\n"
-            "3. 📅 **Lập lịch Ôn thi Tự động (EDF):** Phân bổ giờ học tối ưu theo hạn thi, "
-            "số tín chỉ và độ khó.\n"
-            "4. 📥 **Bóc tách Deadline Bài tập:** Trích xuất thông báo giảng viên từ Moodle "
-            "hoặc file lịch `.ics`.\n\n"
-            "💬 *Bạn đang cần mình giúp về phần nào? Cứ nhắn tự nhiên ở bên dưới nhé!*"
+            "Chào bạn! Mình là **H.E.R.M.E.S** — cố vấn học tập dành riêng cho "
+            "sinh viên ĐH Khoa học Tự nhiên (ĐHQG-HCM).\n\n"
+            "Hôm nay bạn đang cần mình tháo gỡ vấn đề nào? Bạn có thể nhắn trực tiếp "
+            "hoặc chọn nhanh một chủ đề dưới đây:\n"
+            "- **Tra cứu Quy chế & Chuẩn ngoại ngữ:** Kiểm tra điều kiện IELTS/TOEIC/VSTEP "
+            "theo đúng khóa tuyển và ngành học của bạn.\n"
+            "- **Tính điểm GPA & Đánh giá Học vụ:** Quy đổi điểm Hệ 10 sang Hệ 4 "
+            "và kiểm tra nguy cơ cảnh báo học vụ.\n"
+            "- **Quản lý Deadline & Lập lịch Ôn thi:** Bóc tách hạn nộp bài từ thông báo "
+            "giảng viên/Moodle để bật thông báo nhắc hẹn và chia lịch học."
         )
         session.add_message("assistant", resp_text)
         return {
@@ -646,7 +963,14 @@ def orchestrate(query: str, session_id: str = "default_user") -> Dict[str, Any]:
             "intent": intent,
             "target_engine": target_engine,
             "response_text": resp_text,
-            "data": {"session_state": session.state.value},
+            "data": {
+                "session_state": session.state.value,
+                "follow_ups": [
+                    "Chuẩn đầu ra ngoại ngữ chương trình tăng cường tiếng Anh ngành CNTT là gì?",
+                    "Tính GPA giúp mình: Giải tích 1 (8.5, 4TC), Cấu trúc dữ liệu (7.5, 4TC)",
+                    "Xếp lịch ôn thi tuần sau cho mình, thứ 4 thi Toán và thứ 6 thi Lý",
+                ],
+            },
             "provenance": None,
         }
 
@@ -655,22 +979,41 @@ def orchestrate(query: str, session_id: str = "default_user") -> Dict[str, Any]:
     # ----------------------------------------------------
     elif intent == INTENT_EXTRACT_DEADLINE:
         from hermes.ai.client import extract_announcement_info
+        from hermes.engines.deadline_parser import compute_deadline_status
 
         session.set_state(DialogueState.IDLE)
         info = extract_announcement_info(clean_query)
         info_dict = info.to_dict()
+        dl_status = compute_deadline_status(info.deadline)
+
         lines = [
-            "📅 **Phiếu Tóm tắt Nhiệm vụ & Hạn nộp (Extracted Task Card)**\n",
-            "| Hạng mục | Nội dung trích xuất |",
+            f"Mình đã trích xuất xong thông tin nhiệm vụ của môn **{info.course_name}**:\n",
+            "| Hạng mục | Chi tiết trích xuất |",
             "| :--- | :--- |",
-            f"| 📚 **Môn học** | **{info.course_name}** |",
-            f"| 📝 **Nội dung bài tập** | {info.assignment_content} |",
-            f"| ⏰ **Hạn chót (Deadline)** | `{info.deadline}` |",
-            f"| 📤 **Hình thức nộp bài** | {info.submission_format} |",
-            f"| ⚠️ **Lưu ý / Yêu cầu khác** | {info.other_requirements} |",
-            "\n💡 *Lời khuyên: Bạn nên hoàn thành và nộp bài lên Moodle trước hạn chót "
-            "ít nhất 2 tiếng để tránh nghẽn mạng nhé!*",
+            f"| **Môn học** | **{info.course_name}** |",
+            f"| **Nội dung nhiệm vụ** | {info.assignment_content} |",
+            f"| **Hạn nộp (Deadline)** | `{info.deadline}` (**{dl_status['countdown_label']}**) |",
+            f"| **Hình thức nộp** | {info.submission_format} |",
+            f"| **Lưu ý khi nộp** | {info.other_requirements} |",
         ]
+        if info.missing_fields:
+            missing_vn = {
+                "course_name": "Tên môn học",
+                "assignment_content": "Nội dung bài tập",
+                "deadline": "Thời hạn nộp",
+                "submission_format": "Hình thức/Nơi nộp",
+            }
+            missing_labels = [missing_vn.get(m, m) for m in info.missing_fields]
+            lines.append(
+                f"\n*Lưu ý:* Trong thông báo gốc chưa nêu rõ **{', '.join(missing_labels)}**, "
+                "bạn nhớ kiểm tra lại trên Moodle hoặc hỏi giảng viên nhé."
+            )
+        else:
+            lines.append(
+                "\n*Bạn có thể bấm nút **Lưu vào Bộ nhắc hạn Deadline** bên dưới để hệ thống "
+                "tự động đếm ngược và bật thông báo nhắc bạn trước giờ nộp bài.*"
+            )
+
         resp_text = "\n".join(lines)
         session.add_message("assistant", resp_text)
         return {
@@ -678,42 +1021,75 @@ def orchestrate(query: str, session_id: str = "default_user") -> Dict[str, Any]:
             "intent": intent,
             "target_engine": target_engine,
             "response_text": resp_text,
-            "data": {**info_dict, "session_state": session.state.value},
-            "provenance": "H.E.R.M.E.S AI Announcement Extractor (R4)",
+            "data": {
+                **info_dict,
+                "deadline_status": dl_status,
+                "extracted_deadline_item": {
+                    "course": info.course_name,
+                    "summary": info.assignment_content,
+                    "deadline": (
+                        dl_status["normalized_dt"]
+                        if dl_status["urgency"] != "unknown"
+                        else info.deadline
+                    ),
+                    "description": f"Hình thức: {info.submission_format}. Lưu ý: {info.other_requirements}",
+                },
+                "session_state": session.state.value,
+                "follow_ups": [
+                    "Lập lịch ôn tập và làm bài trong 7 ngày tới giúp mình",
+                    "Tính điểm GPA học kỳ này giúp mình",
+                ],
+            },
+            "provenance": "Trích xuất thông báo có kiểm chứng chống ảo giác (Grounding Verified)",
         }
 
     # ----------------------------------------------------
-    # Nhánh E: Lập lịch ôn tập (INTENT_SCHEDULING) & Fallback
+    # Nhánh E: Lập lịch ôn tập (INTENT_SCHEDULING)
     # ----------------------------------------------------
     elif intent == INTENT_SCHEDULING:
         from hermes.engines.scheduler import generate_study_plan
 
         session.set_state(DialogueState.IDLE)
-        default_subjects = [
-            {"name": "Toán Rời Rạc", "credits": 4, "priority": 3},
-            {"name": "Cấu Trúc Dữ Liệu & Giải Thuật", "credits": 4, "priority": 2},
-            {"name": "Kiến Trúc Máy Tính", "credits": 3, "priority": 1},
-        ]
-        sample_plan = generate_study_plan(
-            default_subjects, available_hours_per_day=6.0, days_remaining=10
+        last_grades = session.get_slot("last_grades")
+        subjects, daily_hours, days_left = _parse_schedule_params_from_query(
+            clean_query, session_grades=last_grades
         )
+        plan = generate_study_plan(
+            subjects=subjects,
+            available_daily_hours=daily_hours,
+            days_left=days_left,
+        )
+
+        total_hours = round(daily_hours * days_left, 1)
+        prio_labels = {3: "Cao (Trọng tâm)", 2: "Trung bình", 1: "Cơ bản"}
         lines = [
-            "🗓️ **Kế hoạch Phân bổ Thời gian Ôn thi Gợi ý (Thuật toán EDF + Trọng số Tín chỉ)**\n",
-            "Dựa trên nguyên tắc ưu tiên môn có **tín chỉ lớn** và **mức độ ưu tiên/độ khó cao**, "
-            "dưới đây là lộ trình mẫu cho **10 ngày ôn tập (6 giờ/ngày = 60 giờ)**:\n",
-            "| Môn học | Tín chỉ | Độ ưu tiên | Tổng giờ ôn tập | Thời lượng mỗi ngày | Khuyến nghị |",
+            f"Dưới đây là kế hoạch phân bổ thời gian ôn tập cho **{len(plan)} học phần** "
+            f"trong **{days_left} ngày tới** (với quỹ thời gian **{daily_hours:g} giờ/ngày**, "
+            f"tổng cộng **{total_hours:g} giờ**):\n",
+            "| Học phần | Số tín chỉ | Mức ưu tiên | Tổng giờ phân bổ | Thời lượng mỗi ngày | Gợi ý thực hiện |",
             "| :--- | :---: | :---: | :---: | :---: | :--- |",
         ]
-        for item in sample_plan:
-            lines.append(
-                f"| **{item['subject']}** | {item['credits']} TC | Mức {item['priority']} "
-                f"| **{item['total_allocated_hours']} giờ** | `{item['daily_hours']} giờ/ngày` "
-                f"| {item['recommendation']} |"
+        for item in plan:
+            p_val = item.get("priority", 2)
+            p_text = prio_labels.get(p_val, f"Mức {p_val}")
+            d_hrs = item.get("daily_hours", 0.0)
+            tip = (
+                "Ôn vào khung giờ sáng/đầu buổi khi tập trung nhất"
+                if p_val >= 3
+                else (
+                    "Luyện giải đề & bài tập thực hành"
+                    if p_val == 2
+                    else "Hệ thống hóa lý thuyết & ghi chú"
+                )
             )
+            lines.append(
+                f"| **{item['name']}** | {item['credits']} TC | {p_text} "
+                f"| **{item['allocated_hours']:g} giờ** | `{d_hrs:g} giờ/ngày` | {tip} |"
+            )
+
         lines.append(
-            "\n👉 **Tùy chỉnh theo lịch thi của riêng bạn:** Bạn hãy bấm sang tab "
-            "**📅 Lập lịch Ôn thi & Dự báo GPA** ở phía trên để tự thêm môn học, ngày thi "
-            "và kéo thanh trượt điều chỉnh số giờ rảnh mỗi ngày nhé!"
+            "\n*Mẹo nhỏ: Nếu bạn muốn thay đổi danh sách môn thi, kéo thanh trượt điều chỉnh "
+            "số ngày hoặc đồng bộ từ Deadline Moodle, hãy mở tab **Lập lịch Ôn thi & Dự báo GPA** nhé.*"
         )
         resp_text = "\n".join(lines)
         session.add_message("assistant", resp_text)
@@ -722,8 +1098,17 @@ def orchestrate(query: str, session_id: str = "default_user") -> Dict[str, Any]:
             "intent": intent,
             "target_engine": target_engine,
             "response_text": resp_text,
-            "data": {"sample_plan": sample_plan, "session_state": session.state.value},
-            "provenance": "H.E.R.M.E.S Deterministic EDF Study Scheduler (R2)",
+            "data": {
+                "sample_plan": plan,
+                "days_left": days_left,
+                "daily_hours": daily_hours,
+                "session_state": session.state.value,
+                "follow_ups": [
+                    "Xếp lịch ôn thi trong 5 ngày với 4 giờ mỗi ngày cho môn Giải tích và Cấu trúc dữ liệu",
+                    "Chuẩn đầu ra ngoại ngữ chương trình đại trà là gì?",
+                ],
+            },
+            "provenance": "Thuật toán Phân bổ Thời gian Ôn tập Tất định (EDF & Trọng số Tín chỉ)",
         }
 
     else:

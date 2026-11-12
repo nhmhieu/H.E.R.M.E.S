@@ -460,11 +460,14 @@ class KeywordRetriever:
                 {
                     "diem": round(diem, 2),
                     "chunk_id": d["chunk"]["chunk_id"],
+                    "ten_dieu": d["chunk"].get("ten_dieu", ""),
+                    "chu_de": d["chunk"].get("chu_de", ""),
                     "nhom_chuan": d["vb"].get("nhom_chuan"),
                     "pham_vi": _nhan_khoa(d["quy_tac"]),
                     "trich_dan": trich_dan(d["chunk"], d["vb"]),
                     "text": d["chunk"]["text"],
                     "chung_chi_toi_thieu": d["chunk"].get("chung_chi_toi_thieu"),
+                    "bang": d["chunk"].get("bang"),
                 }
                 for diem, d in ket_qua
             ],
