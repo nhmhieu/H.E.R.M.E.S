@@ -1,7 +1,7 @@
 # 🎓 H.E.R.M.E.S — HCMUS Educational Resource & Mentoring Expert System
 
 [![CI Pipeline](https://img.shields.io/badge/CI-passing-brightgreen)](#)
-[![Unit Tests](https://img.shields.io/badge/pytest-475%20passed-brightgreen)](#)
+[![Unit Tests](https://img.shields.io/badge/pytest-480%20passed-brightgreen)](#)
 [![Benchmark](https://img.shields.io/badge/benchmark-72%2F72%20(100%25)-blue)](#)
 [![Code Style](https://img.shields.io/badge/code%20style-black%20%7C%20flake8-000000)](#)
 
@@ -70,32 +70,32 @@ python -m venv .venv
 pip install -e ".[dev]"
 ```
 
-### 3.2 Chạy Giao diện Web (3-Tab Streamlit Dashboard)
+### 3.2 Chạy Giao diện Web (4-Tab Streamlit Dashboard)
 ```bash
 streamlit run src/hermes/ui/app.py
 ```
 
 ### 3.3 Chạy Giao diện Dòng lệnh (Rich CLI)
 ```bash
-# 1. Tra cứu quy chế học vụ & chuẩn đầu ra ngoại ngữ (RAG + BM25):
+# 1. Kiểm tra trạng thái hệ thống:
+hermes info
+
+# 2. Tra cứu quy chế học vụ & chuẩn đầu ra ngoại ngữ (RAG + BM25):
 hermes ask "Chuẩn đầu ra ngoại ngữ chương trình tăng cường tiếng Anh ngành Công nghệ thông tin là gì?"
 
-# 2. Tính GPA hệ 10, hệ 4 và kiểm tra cảnh báo học vụ Điều 16:
-hermes gpa -c "Giải tích 1:4:8.5" -c "Cấu trúc dữ liệu:4:7.5" -c "Tư duy tính toán:3:9.0"
+# 3. Tính GPA hệ 10, hệ 4 và kiểm tra cảnh báo học vụ Điều 16:
+hermes gpa -g 8.5 4 -g 7.5 4 -g 9.0 3 -t 28
 
-# 3. Lập lịch ôn thi tự động (Earliest Deadline First - EDF):
-hermes plan -e "Toán rời rạc:2026-12-15:4:3" -e "Cấu trúc dữ liệu:2026-12-12:4:2" --hours 6
-
-# 4. Chế độ hội thoại đa lượt (Interactive REPL với SessionManager):
-hermes interactive
+# 4. Lập lịch ôn thi tự động theo trọng số tín chỉ & mức ưu tiên:
+hermes plan -s "Toán rời rạc" 4 3 -s "Cấu trúc dữ liệu" 4 2 -h 5 -d 7
 ```
 
-### 3.4 Chạy Kiểm thử Đơn vị (`475 tests`) & Đánh giá Benchmark (`72 cases`)
+### 3.4 Chạy Kiểm thử Đơn vị (`480 tests`) & Đánh giá Benchmark (`72 cases`)
 ```bash
 # Kiểm tra chuẩn PEP8 (0 lỗi):
 flake8 src tests
 
-# Chạy toàn bộ 475 bài kiểm thử đơn vị và tích hợp:
+# Chạy toàn bộ 480 bài kiểm thử đơn vị và tích hợp:
 pytest -q
 
 # Chạy kịch bản đánh giá tự động 72 câu hỏi Benchmark:
