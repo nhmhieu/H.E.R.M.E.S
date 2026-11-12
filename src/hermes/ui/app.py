@@ -161,7 +161,14 @@ def main() -> None:
         st.subheader("👤 Hồ sơ Sinh viên của bạn")
         student_cohort = st.selectbox(
             "Khóa tuyển sinh",
-            options=["Tự động nhận diện", "Khóa K25", "Khóa K24", "Khóa K23", "Khóa K22", "Khóa K21"],
+            options=[
+                "Tự động nhận diện",
+                "Khóa K25",
+                "Khóa K24",
+                "Khóa K23",
+                "Khóa K22",
+                "Khóa K21",
+            ],
             index=2,
             help="Giúp H.E.R.M.E.S tự động ưu tiên đúng văn bản quy chế theo khóa của bạn.",
         )
@@ -183,7 +190,9 @@ def main() -> None:
         with st.form("gpa_form"):
             mon_hoc = st.text_input("Tên môn học", placeholder="VD: Hệ điều hành")
             col_tc, col_diem = st.columns(2)
-            tin_chi = col_tc.number_input("Số tín chỉ", min_value=1, max_value=10, value=3)
+            tin_chi = col_tc.number_input(
+                "Số tín chỉ", min_value=1, max_value=10, value=3
+            )
             diem_so = col_diem.number_input(
                 "Điểm hệ 10", min_value=0.0, max_value=10.0, value=8.0, step=0.1
             )
@@ -298,9 +307,12 @@ def main() -> None:
                 if message.get("meta"):
                     st.caption(message["meta"])
 
-        user_prompt = st.chat_input(
-            "Hỏi H.E.R.M.E.S về quy chế HCMUS, chuẩn ngoại ngữ, tính GPA hoặc lịch ôn thi..."
-        ) or sample_q
+        user_prompt = (
+            st.chat_input(
+                "Hỏi H.E.R.M.E.S về quy chế HCMUS, chuẩn ngoại ngữ, tính GPA hoặc lịch ôn thi..."
+            )
+            or sample_q
+        )
 
         if user_prompt:
             with st.chat_message("user", avatar="🧑‍💻"):
@@ -312,14 +324,27 @@ def main() -> None:
             # Bổ sung ngữ cảnh hồ sơ sinh viên nếu câu hỏi chưa nêu rõ khóa/hệ
             effective_query = user_prompt
             q_low = user_prompt.lower()
-            has_cohort = any(k in q_low for k in ["k20", "k21", "k22", "k23", "k24", "k25"])
+            has_cohort = any(
+                k in q_low for k in ["k20", "k21", "k22", "k23", "k24", "k25"]
+            )
             if not has_cohort and student_cohort != "Tự động nhận diện":
                 # Chỉ nối ngữ cảnh nếu là câu hỏi quy chế
-                if any(
-                    kw in q_low
-                    for kw in ["ngoại ngữ", "tiếng anh", "toeic", "ielts", "chuẩn đầu ra"]
-                ) and "ngành công nghệ thông tin" not in q_low:
-                    effective_query = f"{user_prompt} ({student_cohort}, {student_program})"
+                if (
+                    any(
+                        kw in q_low
+                        for kw in [
+                            "ngoại ngữ",
+                            "tiếng anh",
+                            "toeic",
+                            "ielts",
+                            "chuẩn đầu ra",
+                        ]
+                    )
+                    and "ngành công nghệ thông tin" not in q_low
+                ):
+                    effective_query = (
+                        f"{user_prompt} ({student_cohort}, {student_program})"
+                    )
 
             with st.chat_message("assistant", avatar="🎓"):
                 res = orchestrate(effective_query)
@@ -329,7 +354,10 @@ def main() -> None:
                 engine_label = res.get("target_engine", "orchestrator")
                 intent_label = res.get("intent", "GENERAL")
                 prov = res.get("provenance")
-                meta_parts = [f"⚙️ **Engine:** `{engine_label}`", f"🎯 **Intent:** `{intent_label}`"]
+                meta_parts = [
+                    f"⚙️ **Engine:** `{engine_label}`",
+                    f"🎯 **Intent:** `{intent_label}`",
+                ]
                 if prov:
                     meta_parts.append(f"📌 **Nguồn trích dẫn:** *{prov}*")
                 meta_text = " • ".join(meta_parts)
@@ -356,7 +384,9 @@ def main() -> None:
 
             with st.expander("➕ Thêm môn thi vào kế hoạch ôn tập", expanded=False):
                 with st.form("add_exam_form"):
-                    ex_name = st.text_input("Tên môn thi", placeholder="VD: Mạng Máy Tính")
+                    ex_name = st.text_input(
+                        "Tên môn thi", placeholder="VD: Mạng Máy Tính"
+                    )
                     ex_c1, ex_c2 = st.columns(2)
                     ex_tc = ex_c1.number_input("Số tín chỉ", 1, 10, 4)
                     ex_prio = ex_c2.selectbox(
@@ -368,7 +398,10 @@ def main() -> None:
                             else ("2 - Trung bình" if x == 2 else "1 - Cơ bản")
                         ),
                     )
-                    if st.form_submit_button("Thêm vào lịch ôn thi") and ex_name.strip():
+                    if (
+                        st.form_submit_button("Thêm vào lịch ôn thi")
+                        and ex_name.strip()
+                    ):
                         st.session_state.exam_subjects.append(
                             {
                                 "name": ex_name.strip(),
@@ -452,9 +485,10 @@ def main() -> None:
             if st.button("🔍 Bóc tách Thông tin Bài tập", type="primary"):
                 try:
                     info = extract_announcement_info(raw_ann, mode=ai_mode)
-                    st.success("Đã bóc tách và kiểm chứng chống ảo giác (Grounding Verified)!")
-                    st.markdown(
-                        f"""
+                    st.success(
+                        "Đã bóc tách và kiểm chứng chống ảo giác (Grounding Verified)!"
+                    )
+                    st.markdown(f"""
                         | Trường thông tin | Kết quả trích xuất |
                         | :--- | :--- |
                         | **📚 Môn học** | **{info.course_name}** |
@@ -462,8 +496,7 @@ def main() -> None:
                         | **⏰ Hạn nộp (Deadline)** | `{info.deadline}` |
                         | **📤 Hình thức nộp** | {info.submission_format} |
                         | **⚠️ Lưu ý thêm** | {info.other_requirements} |
-                        """
-                    )
+                        """)
                 except Exception as exc:
                     st.error(f"Lỗi kết nối AI ({ai_mode}): {exc}")
 
@@ -476,14 +509,18 @@ def main() -> None:
 
             ics_text_to_parse = None
             if uploaded_ics is not None:
-                ics_text_to_parse = uploaded_ics.read().decode("utf-8", errors="replace")
+                ics_text_to_parse = uploaded_ics.read().decode(
+                    "utf-8", errors="replace"
+                )
             elif use_sample_ics:
                 ics_text_to_parse = SAMPLE_ICS_CONTENT
 
             if ics_text_to_parse:
                 events = parse_ics_deadlines(ics_text_to_parse)
                 if events:
-                    st.success(f"🎉 Đã trích xuất thành công {len(events)} hạn nộp bài từ lịch Moodle!")
+                    st.success(
+                        f"🎉 Đã trích xuất thành công {len(events)} hạn nộp bài từ lịch Moodle!"
+                    )
                     st.dataframe(events, use_container_width=True, hide_index=True)
                 else:
                     st.warning("Không tìm thấy sự kiện VEVENT nào trong dữ liệu .ics.")
