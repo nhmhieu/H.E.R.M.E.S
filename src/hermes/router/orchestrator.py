@@ -700,6 +700,216 @@ def _parse_schedule_params_from_query(
     return default_subjects, daily_hours, days_left
 
 
+def _try_parse_what_if_query(
+    query: str,
+    session_grades: list[dict[str, Any]] | None = None,
+) -> dict[str, Any] | None:
+    """
+    Phát hiện và giải bài toán Dự báo GPA Mục tiêu (What-If Simulation - UC03)
+    bằng thuật toán tất định simulate_gpa() (R2).
+    """
+    from hermes.engines.academic_calc import calculate_gpa_10
+    from hermes.engines.scheduler import simulate_gpa
+
+    q_lower = query.lower()
+    what_if_triggers = [
+        "kéo gpa",
+        "lên gpa",
+        "mục tiêu",
+        "cần đạt",
+        "cần mấy điểm",
+        "dự báo gpa",
+        "kỳ sau",
+        "kỳ tới",
+        "để kéo",
+        "để lên",
+    ]
+    if not any(t in q_lower for t in what_if_triggers):
+        return None
+
+    # 1. Tìm target_gpa (VD: "lên 7.0", "lên GPA 8.0", "mục tiêu 7.5")
+    target_match = re.search(
+        r"(?:lên(?:\s+gpa)?(?:\s+tích\s+lũy)?|mục\s+tiêu(?:\s+gpa)?)\s*(?:là\s*)?(\d+(?:[.,]\d+)?)",
+        q_lower,
+    )
+    if not target_match:
+        return None
+    target_gpa = float(target_match.group(1).replace(",", "."))
+
+    # 2. Tìm remaining_credits (VD: "kỳ này học 15TC", "đăng ký 12 tín chỉ")
+    rem_match = re.search(
+        r"(?:kỳ\s+(?:này|sau|tới)\s*(?:mình\s*)?(?:học|đăng\s+ký)?|"
+        r"đăng\s+ký(?:\s+thêm)?|học\s+thêm)\s*(\d{1,3})\s*(?:tc|tín(?:\s*chỉ)?)",
+        q_lower,
+    )
+    if not rem_match:
+        return None
+    remaining_credits = int(rem_match.group(1))
+    if remaining_credits <= 0:
+        return None
+
+    # 3. Tìm current_gpa & current_credits từ câu hỏi hoặc từ session_grades
+    cur_gpa_match = re.search(
+        r"gpa(?:\s+hiện\s+tại|\s+tích\s+lũy)?(?:\s+của\s+mình)?(?:\s+là)?\s*(\d+(?:[.,]\d+)?)",
+        q_lower,
+    )
+    cur_tc_match = re.search(
+        r"(?:tích\s+lũy|đã\s+học|hiện\s+có)\s*(\d{1,3})\s*(?:tc|tín(?:\s*chỉ)?)",
+        q_lower,
+    )
+
+    if cur_gpa_match and cur_tc_match:
+        current_gpa = float(cur_gpa_match.group(1).replace(",", "."))
+        current_credits = int(cur_tc_match.group(1))
+        current_courses = [{"credits": current_credits, "grade": current_gpa}]
+    elif session_grades:
+        current_courses = [
+            {"credits": int(g["credits"]), "grade": float(g["grade"])}
+            for g in session_grades
+        ]
+        current_credits = sum(c["credits"] for c in current_courses)
+        current_gpa = calculate_gpa_10(
+            [(c["grade"], c["credits"]) for c in current_courses]
+        )
+    else:
+        return None
+
+    required_gpa = simulate_gpa(
+        current_courses=current_courses,
+        target_gpa=target_gpa,
+        remaining_credits=remaining_credits,
+    )
+    total_future_tc = current_credits + remaining_credits
+    feasible = required_gpa <= 10.0
+
+    if feasible:
+        req_display = max(0.0, required_gpa)
+        feasibility_str = (
+            "Khả thi trong 1 học kỳ"
+            if req_display <= 8.5
+            else "Khả thi nhưng đòi hỏi nỗ lực rất cao (cần đạt mức Giỏi/Xuất sắc)"
+        )
+        advice = (
+            f"Để nâng GPA tích lũy từ **{current_gpa:.2f}** ({current_credits} TC) lên **{target_gpa:.2f}** "
+            f"sau khi học thêm **{remaining_credits} tín chỉ** (tổng `{total_future_tc} TC`), "
+            f"bạn cần đạt điểm trung bình học kỳ tới tối thiểu là **`{req_display:.2f}/10`**."
+        )
+    else:
+        max_possible_gpa = round(
+            (current_gpa * current_credits + 10.0 * remaining_credits)
+            / total_future_tc,
+            2,
+        )
+        feasibility_str = f"Chưa khả thi trong 1 học kỳ (vượt thang điểm 10.0 — cần {required_gpa:.2f}/10)"
+        advice = (
+            f"Ngay cả khi bạn đạt tuyệt đối **10.0/10** cho toàn bộ **{remaining_credits} tín chỉ** sắp tới, "
+            f"GPA tích lũy tối đa sau kỳ này sẽ là **`{max_possible_gpa:.2f}/10`**. "
+            "Bạn nên chia lộ trình kéo điểm qua **2 học kỳ** hoặc đăng ký học cải thiện các môn điểm thấp (D/D+)."
+        )
+
+    resp_lines = [
+        "**Kết quả Mô phỏng GPA Mục tiêu (What-If Simulation — UC03):**\n",
+        advice + "\n",
+        "| Chỉ số học vụ | Giá trị tính toán |",
+        "| :--- | :--- |",
+        f"| **GPA tích lũy hiện tại** | `{current_gpa:.2f} / 10` ({current_credits} tín chỉ) |",
+        f"| **Số tín chỉ đăng ký thêm** | `{remaining_credits} tín chỉ` (Tổng sau kỳ tới: `{total_future_tc} TC`) |",
+        f"| **GPA tích lũy mục tiêu** | **`{target_gpa:.2f} / 10`** |",
+        f"| **GPA học kỳ tối thiểu cần đạt** | **`{required_gpa:.2f} / 10`** |",
+        f"| **Đánh giá tính khả thi** | {feasibility_str} |",
+    ]
+    return {
+        "response_text": "\n".join(resp_lines),
+        "what_if": {
+            "current_gpa": current_gpa,
+            "current_credits": current_credits,
+            "remaining_credits": remaining_credits,
+            "target_gpa": target_gpa,
+            "required_gpa": required_gpa,
+            "feasible": feasible,
+        },
+    }
+
+
+def _try_answer_academic_warning_query(query: str) -> dict[str, Any] | None:
+    """
+    Trả lời chính xác điều kiện Cảnh báo học vụ & Buộc thôi học theo Điều 16
+    Quy chế Đào tạo Học chế Tín chỉ (1175/QĐ-KHTN) và kiểm tra số liệu nếu có (UC02).
+    """
+    from hermes.engines.academic_calc import check_academic_warning
+
+    q_lower = query.lower()
+    if not any(
+        kw in q_lower for kw in ["cảnh báo học vụ", "cảnh báo kết quả", "buộc thôi học"]
+    ):
+        return None
+
+    # Kiểm tra xem sinh viên có nêu số tín chỉ đạt hoặc điểm trung bình cụ thể không
+    tc_match = re.search(
+        r"(?:đạt|có|học|tích\s+lũy)\s*(\d{1,2})\s*(?:tc|tín(?:\s*chỉ)?)", q_lower
+    )
+    gpa_match = re.search(
+        r"(?:gpa|điểm\s+trung\s+bình|đtb)\s*(?:học\s+kỳ\s*)?(?:là\s*)?(\d+(?:[.,]\d+)?)",
+        q_lower,
+    )
+
+    eval_section = ""
+    warn_res = None
+    if tc_match or gpa_match:
+        earned_tc = int(tc_match.group(1)) if tc_match else 12
+        sem_gpa = float(gpa_match.group(1).replace(",", ".")) if gpa_match else 6.0
+        warn_res = check_academic_warning(
+            current_semester_earned_credits=earned_tc,
+            accumulated_credits=max(earned_tc, 15),
+            previous_semester_gpa=sem_gpa,
+            two_previous_semesters_gpa=sem_gpa,
+        )
+        if warn_res["is_warning"]:
+            eval_section = (
+                f"**Đánh giá trường hợp của bạn:** Với số liệu bạn cung cấp "
+                f"(tín chỉ đạt trong kỳ: `{earned_tc} TC`, ĐTB học kỳ: `{sem_gpa:.2f}/10`), "
+                f"bạn thuộc diện **{warn_res['status']}** do: *{'; '.join(warn_res['reasons'])}*.\n\n"
+            )
+        else:
+            eval_section = (
+                f"**Đánh giá trường hợp của bạn:** Với số liệu bạn cung cấp "
+                f"(tín chỉ đạt trong kỳ: `{earned_tc} TC`, ĐTB học kỳ: `{sem_gpa:.2f}/10`), "
+                "bạn **An toàn (không bị cảnh báo học vụ)** trong học kỳ này.\n\n"
+            )
+
+    lines = [
+        eval_section
+        + "Theo **Điều 16 – Quy chế Đào tạo theo Hệ thống Tín chỉ (1175/QĐ-KHTN)** "
+        "của Trường ĐH Khoa học Tự nhiên (ĐHQG-HCM), sinh viên sẽ bị **Cảnh báo kết quả "
+        "học tập (Cảnh báo học vụ)** hoặc **Buộc thôi học** khi rơi vào một trong các ngưỡng sau:\n",
+        "| Phân loại | Tiêu chí kiểm tra theo Quy chế (Điều 16) | Ngưỡng vi phạm | Hệ quả học vụ |",
+        "| :--- | :--- | :---: | :--- |",
+        (
+            "| **Ngưỡng 1 (Tín chỉ học kỳ)** | Tổng số tín chỉ đạt trong 1 học kỳ chính "
+            "*(không tính học kỳ cuối khóa)* | **`< 7 tín chỉ`** | **Cảnh báo học vụ** |"
+        ),
+        (
+            "| **Ngưỡng 2 (ĐTB 1 học kỳ)** | Điểm trung bình học kỳ "
+            "(GPA hệ 10 của học kỳ chính) | **`< 3.00 / 10`** | **Cảnh báo học vụ** |"
+        ),
+        (
+            "| **Ngưỡng 3 (ĐTB 2 kỳ liên tiếp)** | Điểm trung bình của "
+            "**2 học kỳ chính liên tiếp** | **`< 4.00 / 10`** | **Cảnh báo học vụ** |"
+        ),
+        (
+            "| **Ngưỡng 4 (Buộc thôi học)** | Số lần bị cảnh báo học vụ liên tiếp "
+            "hoặc vượt thời gian tối đa | **3 lần liên tiếp** | **Xem xét Buộc thôi học** |"
+        ),
+        "\n*Gợi ý:* Nếu bạn muốn mình tính GPA chính xác kèm kiểm tra tự động "
+        "từ danh sách môn học, hãy nhắn theo mẫu: "
+        "`Giải tích 1 (6.5, 4TC), Cấu trúc dữ liệu (5.5, 4TC)` nhé.",
+    ]
+    return {
+        "response_text": "\n".join(lines),
+        "warning_evaluation": warn_res,
+    }
+
+
 def orchestrate(query: str, session_id: str = "default_user") -> Dict[str, Any]:
     """
     Master Pipeline điều phối toàn bộ hệ thống H.E.R.M.E.S.
@@ -881,6 +1091,57 @@ def orchestrate(query: str, session_id: str = "default_user") -> Dict[str, Any]:
                 "provenance": "Quy chế Đào tạo theo Hệ thống Tín chỉ – ĐH Khoa học Tự nhiên, ĐHQG-HCM",
             }
         else:
+            # Kiểm tra bài toán Mô phỏng GPA mục tiêu (What-If Simulation - UC03)
+            what_if_res = _try_parse_what_if_query(
+                clean_query, session_grades=session.get_slot("last_grades")
+            )
+            if what_if_res is not None:
+                session.set_state(DialogueState.IDLE)
+                resp_text = what_if_res["response_text"]
+                session.add_message("assistant", resp_text)
+                return {
+                    "status": "success",
+                    "intent": intent,
+                    "target_engine": target_engine,
+                    "response_text": resp_text,
+                    "data": {
+                        **extracted,
+                        "what_if": what_if_res["what_if"],
+                        "session_state": session.state.value,
+                        "follow_ups": [
+                            "Điểm tích lũy bao nhiêu thì bị cảnh báo học vụ?",
+                            "Lập lịch ôn thi trong 7 ngày với 4 giờ mỗi ngày",
+                        ],
+                    },
+                    "provenance": "Thuật toán Mô phỏng GPA Tất định (What-If Simulation — Quy chế 1175/QĐ-KHTN)",
+                }
+
+            # Kiểm tra câu hỏi về ngưỡng Cảnh báo học vụ / Buộc thôi học (Điều 16 - UC02)
+            warn_query_res = _try_answer_academic_warning_query(clean_query)
+            if warn_query_res is not None:
+                session.set_state(DialogueState.IDLE)
+                resp_text = warn_query_res["response_text"]
+                session.add_message("assistant", resp_text)
+                return {
+                    "status": "success",
+                    "intent": intent,
+                    "target_engine": target_engine,
+                    "response_text": resp_text,
+                    "data": {
+                        **extracted,
+                        "warning_evaluation": warn_query_res["warning_evaluation"],
+                        "session_state": session.state.value,
+                        "follow_ups": [
+                            "Giải tích 1 (4.5, 4TC), Vật lý 1 (5.5, 3TC)",
+                            (
+                                "GPA hiện tại của mình là 6.5 (tích lũy 30TC). "
+                                "Kỳ này học 15TC, cần đạt bao nhiêu để lên GPA 7.0?"
+                            ),
+                        ],
+                    },
+                    "provenance": "Quy chế Đào tạo theo Hệ thống Tín chỉ (1175/QĐ-KHTN) — Điều 16",
+                }
+
             session.set_state(DialogueState.AWAITING_GRADES)
             resp_text = (
                 "Để mình tính chính xác **GPA hệ 10, hệ 4** và kiểm tra **điều kiện an toàn học vụ**, "

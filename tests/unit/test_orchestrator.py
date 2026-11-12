@@ -178,3 +178,24 @@ def test_orchestrate_scheduling_and_deadline_extraction():
     assert dl_res["status"] == "success"
     assert dl_res["intent"] == INTENT_EXTRACT_DEADLINE
     assert dl_res["data"]["extracted_deadline_item"]["course"] == "Cơ sở dữ liệu"
+
+
+def test_orchestrate_uc02_warning_and_uc03_what_if():
+    # UC03: What-If GPA simulation
+    what_if_res = orchestrate(
+        "GPA hiện tại của mình là 6.5 (tích lũy 30TC). "
+        "Kỳ này học 15TC, cần đạt GPA kỳ này bao nhiêu để kéo GPA tích lũy lên 7.0?"
+    )
+    assert what_if_res["status"] == "success"
+    assert what_if_res["intent"] == INTENT_CALC_GPA
+    assert what_if_res["data"]["what_if"]["required_gpa"] == 8.0
+    assert what_if_res["data"]["what_if"]["feasible"] is True
+
+    # UC02: Academic Warning check (Article 16)
+    warn_res = orchestrate(
+        "Kỳ này mình chỉ đạt 5 tín chỉ thì có bị cảnh báo học vụ không?"
+    )
+    assert warn_res["status"] == "success"
+    assert warn_res["intent"] == INTENT_CALC_GPA
+    assert warn_res["data"]["warning_evaluation"]["is_warning"] is True
+    assert "Điều 16" in warn_res["response_text"]

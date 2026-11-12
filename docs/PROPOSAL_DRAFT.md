@@ -239,18 +239,18 @@ flowchart LR
 ├── 4-layer security guardrails & AI Client with Mock/Ollama modes (guardrails.py, client.py)
 └── Two-tier router & end-to-end CLI pipeline with 450+ passing unit tests
 
-[Week 3] MVP End-to-End Integration & Local Ollama Deployment (IN PROGRESS)
+[Week 3] MVP End-to-End Integration & Local Ollama Deployment (COMPLETED)
 ├── Merge all feature branches into main with 100% green GitHub Actions CI
 ├── Integrate Local Ollama runtime (qwen2.5:3b) into HermesAIClient
-├── Connect 3-Tab Streamlit Web UI & Rich CLI with master orchestrate() pipeline
+├── Connect 4-Tab Streamlit Web UI & Rich CLI with master orchestrate() pipeline
 └── Complete Moodle .ics parser & run Benchmark Iteration 1 (Baseline evaluation)
 
-[Week 4] System Refinement & Comparative Evaluation
+[Week 4] System Refinement & Comparative Evaluation (COMPLETED)
 ├── Resolve baseline error taxonomy (routing & RAG edge cases)
-├── Run Benchmark Iteration 2 (Evaluate Before vs. After metrics across 72 test cases)
-└── Polish Streamlit Web Dashboard UX (interactive tables, citation badges)
+├── Run Benchmark Iteration 2 (Evaluate Before vs. After metrics across 72 test cases: 100% accuracy)
+└── Polish Streamlit Web Dashboard UX (interactive tables, citation badges, .ics reminders)
 
-[Week 5] Documentation, Demo Video & Final Defense
+[Week 5] Documentation, Demo Video & Final Defense (IN PROGRESS)
 ├── Complete Technical Report (6 chapters distributed across 6 members)
 ├── Record 3-5 minute live demonstration video (CLI + Web UI + Ollama)
 └── Final slide deck & project defense
@@ -267,7 +267,7 @@ To ensure full accountability across all 6 members, the project is decomposed in
 | **T01** | **TV1 – Hiếu**<br/>(Leader, R1/R5) | Define problem framing, 10 use cases, non-goals, and measurable success criteria | `docs/PROJECT_CHARTER.md`, `Proposal.md` | Week 1 | 10h | Done |
 | **T02** | **TV1 – Hiếu**<br/>(Leader, R1/R5) | Design C4 architecture, data contracts, and set up GitHub Actions CI (`flake8`, `black`, `pytest`) | `docs/ARCHITECTURE.md`, `.github/workflows/ci.yml` | Week 1–2 | 12h | Done |
 | **T03** | **TV1 – Hiếu**<br/>(Leader, R1/R5) | Implement Two-Tier Intent Router, grade extractor, session manager, and master `orchestrate()` pipeline | `src/hermes/router/orchestrator.py`, `session.py`, `test_orchestrator.py` | Week 2–3 | 14h | Done |
-| **T04** | **TV1 – Hiếu**<br/>(Leader, R1/R5) | Manage PR code reviews, branch merges, logbook auditing, and final system integration | `docs/LOGBOOK.md`, GitHub Projects Kanban | Week 1–5 | 12h | In Progress |
+| **T04** | **TV1 – Hiếu**<br/>(Leader, R1/R5) | Manage PR code reviews, branch merges, logbook auditing, and final system integration | `docs/LOGBOOK.md`, GitHub Projects Kanban | Week 1–5 | 12h | Done |
 | **T05** | **TV2 – Thuận**<br/>(Algorithm, R2) | Implement HCMUS Scale-10 to Scale-4/Letter conversion and weighted GPA calculation | `src/hermes/engines/academic_calc.py` | Week 1–2 | 12h | Done |
 | **T06** | **TV2 – Thuận**<br/>(Algorithm, R2) | Implement Article 16 academic warning & probation checker (`<7` credits, `<3.0`/`<4.0` GPA) | `src/hermes/engines/academic_calc.py`, `test_academic_calc.py` | Week 2 | 12h | Done |
 | **T07** | **TV2 – Thuận**<br/>(Algorithm, R2) | Implement Earliest Deadline First (EDF) exam study scheduler (`schedule_exams`, `generate_study_plan`) | `src/hermes/engines/scheduler.py` | Week 2–3 | 14h | Done |
@@ -281,13 +281,13 @@ To ensure full accountability across all 6 members, the project is decomposed in
 | **T15** | **TV4 – Quân**<br/>(Security/AI, R7/R4) | Build `HermesAIClient` supporting **Local Ollama (`qwen2.5:3b`)** and offline `MockClient` + grounding check | `src/hermes/ai/client.py` | Week 2–3 | 12h | Done |
 | **T16** | **TV4 – Quân**<br/>(Security/AI, R7/R4) | Create 500-case adversarial red-teaming regression suite and performance benchmarks (<2ms) | `tests/unit/test_guardrails.py` | Week 2–3 | 8h | Done |
 | **T17** | **TV5 – Tuấn**<br/>(UI/UX Lead, R6) | Build Rich Terminal CLI (`info`, `gpa`, `plan`, `ask`) with formatted tables and UTF-8 support | `src/hermes/cli.py`, `src/hermes/ai_cli.py` | Week 2–3 | 12h | Done |
-| **T18** | **TV5 – Tuấn**<br/>(UI/UX Lead, R6) | Develop interactive Streamlit Web Dashboard (Chat Advisor, GPA Calculator, Study Planner tabs) | `src/hermes/ui/app.py` | Week 2–3 | 16h | In Progress |
-| **T19** | **TV5 – Tuấn**<br/>(UI/UX Lead, R6) | Connect Streamlit UI components to backend `orchestrate()` and render provenance citation badges | `src/hermes/ui/app.py`, `requestTest1.json` | Week 3–4 | 10h | In Progress |
+| **T18** | **TV5 – Tuấn**<br/>(UI/UX Lead, R6) | Develop interactive Streamlit Web Dashboard (Chat Advisor, Deadline Hub, GPA Calculator, Study Planner tabs) | `src/hermes/ui/app.py` | Week 2–3 | 16h | Done |
+| **T19** | **TV5 – Tuấn**<br/>(UI/UX Lead, R6) | Connect Streamlit UI components to backend `orchestrate()` and render provenance citation badges | `src/hermes/ui/app.py`, `requestTest1.json` | Week 3–4 | 10h | Done |
 | **T20** | **TV5 – Tuấn**<br/>(UI/UX Lead, R6) | Design presentation slide deck, UI walkthrough screenshots, and final demo video recording | Slide Deck PDF, Demo Video | Week 2–5 | 10h | In Progress |
-| **T21** | **TV6 – Như Ý**<br/>(QA/Benchmark, R8) | Design 72-case standardized benchmark dataset covering all 6 intents and edge cases | `tests/benchmark/benchmark_cases.json` | Week 2–3 | 14h | In Progress |
-| **T22** | **TV6 – Như Ý**<br/>(QA/Benchmark, R8) | Implement automated evaluation harness measuring Routing Accuracy, Latency, and Defense Rate | `tests/benchmark/run_evaluation.py` | Week 2–3 | 12h | In Progress |
-| **T23** | **TV6 – Như Ý**<br/>(QA/Benchmark, R8) | Implement Moodle `.ics` iCalendar parser (`deadline_parser.py`) to extract upcoming assignments | `src/hermes/engines/deadline_parser.py` | Week 3–4 | 12h | To Do |
-| **T24** | **TV6 – Như Ý**<br/>(QA/Benchmark, R8) | Execute Before vs. After benchmark iterations and compile quantitative QA evaluation report | `docs/EVALUATION_REPORT.md` | Week 4–5 | 10h | To Do |
+| **T21** | **TV6 – Như Ý**<br/>(QA/Benchmark, R8) | Design 72-case standardized benchmark dataset covering all 6 intents and edge cases | `tests/benchmark/benchmark_cases.json` | Week 2–3 | 14h | Done |
+| **T22** | **TV6 – Như Ý**<br/>(QA/Benchmark, R8) | Implement automated evaluation harness measuring Routing Accuracy, Latency, and Defense Rate | `tests/benchmark/run_evaluation.py` | Week 2–3 | 12h | Done |
+| **T23** | **TV6 – Như Ý**<br/>(QA/Benchmark, R8) | Implement Moodle `.ics` iCalendar parser (`deadline_parser.py`) to extract upcoming assignments | `src/hermes/engines/deadline_parser.py` | Week 3–4 | 12h | Done |
+| **T24** | **TV6 – Như Ý**<br/>(QA/Benchmark, R8) | Execute Before vs. After benchmark iterations and compile quantitative QA evaluation report | `docs/EVALUATION_REPORT.md` | Week 4–5 | 10h | Done |
 
 ---
 
@@ -311,14 +311,14 @@ To ensure full accountability across all 6 members, the project is decomposed in
 * **Automated CI Quality Gates (GitHub Actions):** Every Pull Request automatically runs 3 mandatory checks before review:
   1. `flake8 src tests` (Zero PEP8 lint errors).
   2. `black --check src tests` (100% consistent code formatting).
-  3. `pytest` (**458/458 automated unit tests passing**).
+  3. `pytest` (**480/480 automated unit tests passing**).
 * **Peer Review & Logbook:** PRs require architectural review by the Team Leader (TV1) to verify Router Contract compliance, and weekly progress is recorded in `docs/LOGBOOK.md`.
 
 ---
 
 ## 13. Proof of Concept (POC)
 
-All core engines have been implemented, integrated, and verified with **458 passing unit tests**:
+All core engines have been implemented, integrated, and verified with **480 passing unit tests**:
 
 ### POC 1: Deterministic GPA, Warning & EDF Scheduler (`academic_calc.py` & `scheduler.py`)
 ```python

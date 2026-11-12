@@ -2,7 +2,7 @@
   "total_cases": 72,
   "correct_routing": 72,
   "routing_accuracy_pct": 100.0,
-  "average_latency_ms": 0.37,
+  "average_latency_ms": 0.351,
   "error_count": 0,
   "error_taxonomy": []
 }
